@@ -1,0 +1,8 @@
+{
+  "name": "NexusBYOK - AI Agent & Model Orchestration Platform",
+  "description": "Bring Your Own Key & Model platform. Configure providers in an encrypted vault, manage worker agents, map stable job roles (Designer, Developer, Q/C), and view the dashboard of created designs and developments.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
