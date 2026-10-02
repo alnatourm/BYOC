@@ -71,7 +71,39 @@ export const CreateProjectModal: React.FC = () => {
           layoutStructure: 'Header + Main Content Workspace Frame',
           componentHierarchy: ['HeaderNav', 'MainContentArea'],
         },
-        codeContent: `// Project Draft: ${title}\n// Requirements: ${prompt}\n\nimport React from 'react';\n\nexport default function ${title.replace(/[^a-zA-Z0-9]/g, '')}() {\n  return (\n    <div className="p-6 bg-slate-950 text-white rounded-xl border border-slate-800">\n      <h2 className="text-xl font-bold font-display">${title}</h2>\n      <p className="text-xs text-slate-400 mt-1">${prompt}</p>\n    </div>\n  );\n}`,
+        codeContent: `import React, { useState } from 'react';
+import { Car, Zap, Shield, Search, ChevronRight, Check } from 'lucide-react';
+
+export default function ${title.replace(/[^a-zA-Z0-9]/g, '') || 'CarWebsiteShowcase'}() {
+  const [category, setCategory] = useState('all');
+  const [search, setSearch] = useState('');
+
+  const vehicles = [
+    { name: 'Apex Hyperion EV GT', hp: 1020, zero60: '1.98s', range: '420 mi', price: '$118,000' },
+    { name: 'Vanguard V12 Supra-Sport', hp: 850, zero60: '2.7s', range: '380 mi', price: '$185,000' },
+    { name: 'AeroStealth EV SUV', hp: 750, zero60: '3.4s', range: '360 mi', price: '$94,500' },
+  ];
+
+  return (
+    <div className="p-6 bg-slate-950 text-slate-100 rounded-xl font-sans border border-slate-800 space-y-6">
+      <div className="flex justify-between items-center pb-4 border-b border-slate-800">
+        <h1 className="text-2xl font-bold font-display">${title}</h1>
+        <div className="px-3 py-1 bg-indigo-600/20 text-indigo-400 text-xs rounded border border-indigo-500/30">
+          Automotive Fleet Ready
+        </div>
+      </div>
+      <p className="text-xs text-slate-300">${prompt}</p>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {vehicles.map((v, i) => (
+          <div key={i} className="p-4 bg-slate-900 rounded-lg border border-slate-800 space-y-2">
+            <h3 className="font-bold text-white text-sm">{v.name}</h3>
+            <div className="text-xs text-indigo-400 font-mono">{v.price} · {v.hp} HP</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}`,
         qcReport: {
           overallScore: 92,
           passStatus: 'PASSED' as const,
