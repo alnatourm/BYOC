@@ -11,6 +11,9 @@ interface BYOKContextType {
   activeTab: 'dashboard' | 'roles' | 'agents' | 'models' | 'providers' | 'studio';
   setActiveTab: (tab: 'dashboard' | 'roles' | 'agents' | 'models' | 'providers' | 'studio') => void;
   
+  operatingMode: 'byok' | 'managed_factory';
+  setOperatingMode: (mode: 'byok' | 'managed_factory') => void;
+  
   // Selected artifact for detailed inspector modal
   selectedArtifact: ProjectArtifact | null;
   setSelectedArtifact: (artifact: ProjectArtifact | null) => void;
@@ -44,6 +47,7 @@ interface BYOKContextType {
   deleteRole: (id: string) => void;
 
   addArtifact: (artifact: ProjectArtifact) => void;
+  updateArtifactStatus: (id: string, status: ProjectArtifact['status']) => void;
   deleteArtifact: (id: string) => void;
 
   // Reset to default presets
@@ -84,6 +88,7 @@ export const BYOKProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [activeTab, setActiveTab] = useState<'dashboard' | 'roles' | 'agents' | 'models' | 'providers' | 'studio'>('dashboard');
+  const [operatingMode, setOperatingMode] = useState<'byok' | 'managed_factory'>('byok');
   const [selectedArtifact, setSelectedArtifact] = useState<ProjectArtifact | null>(null);
 
   const [isAddProviderOpen, setIsAddProviderOpen] = useState(false);
@@ -237,6 +242,15 @@ export const BYOKProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Artifact CRUD
   const addArtifact = (artifact: ProjectArtifact) => {
     setArtifacts((prev) => [artifact, ...prev]);
+  };
+
+  const updateArtifactStatus = (id: string, status: ProjectArtifact['status']) => {
+    setArtifacts((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, status } : a))
+    );
+    if (selectedArtifact && selectedArtifact.id === id) {
+      setSelectedArtifact((prev) => (prev ? { ...prev, status } : null));
+    }
   };
 
   const deleteArtifact = (id: string) => {
@@ -518,6 +532,8 @@ export const BYOKProvider: React.FC<{ children: React.ReactNode }> = ({ children
         artifacts,
         activeTab,
         setActiveTab,
+        operatingMode,
+        setOperatingMode,
         selectedArtifact,
         setSelectedArtifact,
         isAddProviderOpen,
@@ -542,6 +558,7 @@ export const BYOKProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateRole,
         deleteRole,
         addArtifact,
+        updateArtifactStatus,
         deleteArtifact,
         resetToDefaults,
         orchestrationLogs,

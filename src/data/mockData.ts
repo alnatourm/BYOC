@@ -67,6 +67,19 @@ export const INITIAL_PROVIDERS: Provider[] = [
     createdDate: '2026-03-05'
   },
   {
+    id: 'prov-factory',
+    name: 'Platform Factory Managed Engine',
+    type: 'factory',
+    baseUrl: 'https://api.aifactory.internal/v1',
+    vaultKeyId: 'vault_platform_managed',
+    maskedSecret: 'MANAGED_PLATFORM_CREDITS',
+    isSecretInVault: true,
+    status: 'active',
+    rateLimitRpm: 1200,
+    totalCallsMonth: 58200,
+    createdDate: '2026-03-20'
+  },
+  {
     id: 'prov-stitch',
     name: 'Google Stitch AI',
     type: 'stitch',
@@ -211,6 +224,19 @@ export const INITIAL_MODELS: Model[] = [
 
 export const INITIAL_AGENTS: Agent[] = [
   {
+    id: 'agt-docuguard-dc',
+    name: 'DocuGuard-DC',
+    title: 'Document Control & Release Dossier Signoff Agent',
+    avatarUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
+    directives: 'Generates immutable release dossiers, verifies checksums (SHA-256), enforces version increments, and compiles compliance records.',
+    temperature: 0.1,
+    tools: ['doc_generator', 'checksum_signer', 'dossier_exporter'],
+    maxRunsPerDay: 1000,
+    totalRunsCompleted: 512,
+    status: 'idle',
+    createdAt: '2026-03-20'
+  },
+  {
     id: 'agt-stitchcrafter-ui',
     name: 'StitchCrafter-UI',
     title: 'Google Stitch Design & Layout Engine Specialist',
@@ -329,6 +355,19 @@ export const INITIAL_ROLES: Role[] = [
     customMandate: 'Perform 12-point quality check including WCAG AA contrast, responsive layout limits, error boundaries, and single-line control truncation.',
     status: 'active',
     updatedAt: '2026-03-29'
+  },
+  {
+    id: 'role-doc-control',
+    roleTitle: 'Document Control',
+    category: 'doc_control',
+    description: 'Responsible for compiling versioned release dossiers, signing SHA-256 checksums, and enforcing gate compliance.',
+    assignedAgentId: 'agt-docuguard-dc',
+    assignedModelId: 'mod-gemini-2.5-flash',
+    fallbackModelId: 'mod-claude-3-5-sonnet',
+    executionOrder: 4,
+    customMandate: 'Sign release dossier with SHA-256 checksum, document version history, and human gate signoffs.',
+    status: 'active',
+    updatedAt: '2026-03-30'
   },
   {
     id: 'role-product-owner',

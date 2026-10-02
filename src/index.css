@@ -2,8 +2,8 @@
 
 @layer base {
   :root {
-    --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-    --font-display: 'Cabinet Grotesk', 'Plus Jakarta Sans', sans-serif;
+    --font-sans: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-display: 'Outfit', 'Manrope', sans-serif;
     --font-mono: 'JetBrains Mono', monospace;
   }
 }

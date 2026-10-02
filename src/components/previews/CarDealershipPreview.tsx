@@ -22,6 +22,7 @@ export const CarDealershipPreview: React.FC<{ projectTitle?: string }> = ({ proj
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [bookedSuccess, setBookedSuccess] = useState(false);
   const [testDriveDate, setTestDriveDate] = useState('2026-10-05');
+  const [themeMode, setThemeMode] = useState<'red_white' | 'red_dark'>('red_white');
 
   const vehicles: Vehicle[] = [
     {
@@ -97,17 +98,44 @@ export const CarDealershipPreview: React.FC<{ projectTitle?: string }> = ({ proj
   };
 
   return (
-    <div className="bg-slate-950 text-slate-100 rounded-2xl border border-slate-800 overflow-hidden font-sans space-y-6 p-6 shadow-2xl">
+    <div className={`rounded-2xl border overflow-hidden font-sans space-y-6 p-6 shadow-2xl transition-colors ${
+      themeMode === 'red_white'
+        ? 'bg-white text-slate-900 border-red-200'
+        : 'bg-slate-950 text-slate-100 border-red-900/60'
+    }`}>
+      {/* Google Stitch Design Tokens Banner */}
+      <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-red-600 animate-pulse" />
+          <span className="font-bold text-red-600 font-mono">Google Stitch AI Design Engine</span>
+          <span className="text-slate-400">·</span>
+          <span className="font-medium text-slate-700 dark:text-slate-300">Layout Canvas v2.5 Synchronized</span>
+        </div>
+
+        <div className="flex items-center gap-2 font-mono text-[11px]">
+          <span className="px-2 py-0.5 rounded bg-red-600 text-white font-bold">#DC2626 Crimson</span>
+          <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-900 font-bold border border-slate-300">#FFFFFF Alpine White</span>
+          <button
+            onClick={() => setThemeMode((prev) => (prev === 'red_white' ? 'red_dark' : 'red_white'))}
+            className="px-2.5 py-1 text-xs font-sans font-semibold text-red-600 bg-red-100 hover:bg-red-200 rounded transition ml-2"
+          >
+            {themeMode === 'red_white' ? '🔴 Alpine Red & White' : '🔴 Dark Crimson Mode'}
+          </button>
+        </div>
+      </div>
+
       {/* Top Navbar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-red-100 dark:border-slate-800 pb-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400">
+          <div className="w-10 h-10 rounded-xl bg-red-600 text-white flex items-center justify-center shadow-md">
             <Car className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-xs font-mono text-indigo-400">Automotive Showcase</div>
-            <h2 className="text-xl font-extrabold text-white font-display">
-              {projectTitle || 'Nexus Automotive Dealership'}
+            <div className="text-xs font-mono text-red-600 font-bold uppercase tracking-wider">
+              Google Stitch · Red & White Edition
+            </div>
+            <h2 className="text-xl font-extrabold font-display tracking-tight">
+              {projectTitle || 'Red & White Car Dealership'}
             </h2>
           </div>
         </div>
@@ -118,16 +146,16 @@ export const CarDealershipPreview: React.FC<{ projectTitle?: string }> = ({ proj
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Search model or specs..."
+              placeholder="Search red & white models..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-slate-900 text-xs text-white placeholder-slate-500 pl-9 pr-3 py-2 rounded-lg border border-slate-800 focus:outline-none focus:border-indigo-500 w-48 md:w-60"
+              className="bg-slate-100 dark:bg-slate-900 text-xs text-slate-900 dark:text-white placeholder-slate-400 pl-9 pr-3 py-2 rounded-lg border border-red-200 dark:border-slate-800 focus:outline-none focus:border-red-600 w-48 md:w-60"
             />
           </div>
 
           <button
             onClick={() => setSelectedCategory('all')}
-            className="px-3.5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition"
+            className="px-3.5 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg transition shadow-md"
           >
             All Models ({vehicles.length})
           </button>

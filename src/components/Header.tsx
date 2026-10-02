@@ -3,56 +3,78 @@ import { useBYOK } from '../context/BYOKContext';
 import { ShieldCheck, Plus, RotateCcw, Cpu, Sparkles } from 'lucide-react';
 
 export const Header: React.FC = () => {
-  const { activeTab, setActiveTab, setIsAddProviderOpen, setIsCreateProjectOpen, resetToDefaults } = useBYOK();
+  const { activeTab, setActiveTab, operatingMode, setOperatingMode, setIsAddProviderOpen, setIsCreateProjectOpen, resetToDefaults } = useBYOK();
 
   const navItems = [
-    { id: 'dashboard', label: 'Dashboard' },
-    { id: 'roles', label: 'Roles & Pipeline' },
-    { id: 'agents', label: 'Agents Studio' },
-    { id: 'models', label: 'Models Catalog' },
-    { id: 'providers', label: 'Providers & Vault' },
-    { id: 'studio', label: 'Live Orchestrator' },
+    { id: 'dashboard', label: 'My Software', arLabel: 'برمجياتي' },
+    { id: 'roles', label: 'Workforce & Roles', arLabel: 'أدوار المصنع' },
+    { id: 'agents', label: 'Agents Studio', arLabel: 'الوكلاء' },
+    { id: 'models', label: 'Models Catalog', arLabel: 'النماذج' },
+    { id: 'providers', label: 'Providers & Vault', arLabel: 'الخزنة المشفرة' },
+    { id: 'studio', label: 'My Factory', arLabel: 'مصنعي الذكي' },
   ] as const;
 
   return (
-    <header className="sticky top-0 z-40 bg-slate-950/90 backdrop-blur-md border-b border-slate-800/80 px-4 md:px-8 py-3.5 flex items-center justify-between">
-      {/* Zone 1: Single text element Brand mark */}
+    <header className="sticky top-0 z-40 bg-slate-950/95 backdrop-blur-md border-b border-orange-950/40 px-4 md:px-8 py-3.5 flex items-center justify-between shadow-lg">
+      {/* Zone 1: OGroup AI Factory Brand Mark */}
       <div className="flex items-center gap-3">
         <a 
           href="#dashboard" 
           onClick={(e) => { e.preventDefault(); setActiveTab('dashboard'); }}
           className="text-xl font-extrabold tracking-tight text-white font-display flex items-center gap-2 group"
         >
-          <div className="w-8 h-8 rounded-lg bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 group-hover:bg-indigo-600/30 transition">
-            <Cpu className="w-4 h-4" />
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-orange-500 to-amber-500 flex items-center justify-center text-white font-bold shadow-md shadow-orange-500/20">
+            ⚡
           </div>
-          <span className="bg-gradient-to-r from-white via-slate-200 to-indigo-300 bg-clip-text text-transparent">
-            NexusBYOK
-          </span>
+          <div className="flex flex-col">
+            <span className="font-extrabold text-white text-base leading-none font-display">OGroup</span>
+            <span className="text-[10px] text-orange-500 font-bold tracking-wider leading-none mt-1">AI FACTORY ✦ v2.4 ✨</span>
+          </div>
         </a>
 
-        {/* Vault Status Indicator */}
-        <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 bg-slate-900 border border-slate-800 rounded-md text-[11px] font-mono text-emerald-400">
-          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-          <span>Vault Sealed</span>
+        {/* Operating Mode Switcher (Managed Factory vs Custom BYOK) */}
+        <div className="hidden lg:flex items-center bg-slate-900 border border-slate-800 rounded-xl p-0.5 text-[11px] font-mono">
+          <button
+            onClick={() => setOperatingMode('managed_factory')}
+            className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 cursor-pointer ${
+              operatingMode === 'managed_factory'
+                ? 'bg-orange-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <span>🌟 Managed Factory</span>
+            <span className="text-[10px] font-sans text-orange-200">/ المدار</span>
+          </button>
+          <button
+            onClick={() => setOperatingMode('byok')}
+            className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 cursor-pointer ${
+              operatingMode === 'byok'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <span>⚙️ Custom BYOK</span>
+            <span className="text-[10px] font-sans text-indigo-200">/ المخصص</span>
+          </button>
         </div>
       </div>
 
       {/* Zone 2: Navigation Links */}
-      <nav className="hidden md:flex items-center gap-1 bg-slate-900/60 p-1 rounded-lg border border-slate-800/60">
+      <nav className="hidden md:flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800">
         {navItems.map((item) => {
           const isActive = activeTab === item.id;
           return (
             <button
               key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              className={`px-3.5 py-1.5 text-xs font-medium rounded-md transition-all whitespace-nowrap ${
+              onClick={() => setActiveTab(item.id as any)}
+              className={`px-3 py-1.5 text-xs rounded-lg transition-all whitespace-nowrap flex items-center gap-1 ${
                 isActive
-                  ? 'bg-indigo-600 text-white shadow-sm font-semibold'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                  ? 'bg-orange-600 text-white font-bold shadow-md'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
               }`}
             >
-              {item.label}
+              <span>{item.label}</span>
+              <span className="text-[10px] opacity-60 font-sans">{item.arLabel}</span>
             </button>
           );
         })}
@@ -62,32 +84,23 @@ export const Header: React.FC = () => {
       <div className="flex items-center gap-2">
         <button
           onClick={() => setIsCreateProjectOpen(true)}
-          className="px-3.5 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-sm transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
+          className="px-4 py-2 text-xs font-bold text-white bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 rounded-xl shadow-md shadow-orange-500/20 transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
         >
-          <Plus className="w-3.5 h-3.5" />
-          <span>New Project</span>
+          <Plus className="w-4 h-4" />
+          <span>Build Software 🚀</span>
         </button>
 
         <button
           onClick={() => setActiveTab('studio')}
-          className="hidden sm:flex px-3 py-1.5 text-xs font-medium text-slate-300 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg transition items-center gap-1.5 whitespace-nowrap cursor-pointer"
+          className="hidden sm:flex px-3 py-2 text-xs font-medium text-slate-300 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl transition items-center gap-1.5 whitespace-nowrap cursor-pointer"
         >
-          <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-          <span>Quick Orchestrate</span>
-        </button>
-
-        <button
-          onClick={() => setIsAddProviderOpen(true)}
-          className="hidden sm:flex px-3 py-1.5 text-xs font-medium text-slate-300 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg transition items-center gap-1 whitespace-nowrap"
-          title="Add new BYOK Provider"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>Add Provider</span>
+          <Sparkles className="w-3.5 h-3.5 text-orange-400" />
+          <span>My Factory</span>
         </button>
 
         <button
           onClick={resetToDefaults}
-          className="p-1.5 text-slate-400 hover:text-slate-200 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg transition"
+          className="p-2 text-slate-400 hover:text-slate-200 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl transition"
           title="Reset to default preset data"
         >
           <RotateCcw className="w-3.5 h-3.5" />

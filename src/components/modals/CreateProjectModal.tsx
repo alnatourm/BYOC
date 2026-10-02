@@ -51,7 +51,7 @@ export const CreateProjectModal: React.FC = () => {
         type: 'full_pipeline' as const,
         category,
         date: new Date().toISOString().split('T')[0],
-        status: 'Draft' as const,
+        status: 'In Review' as const,
         assignedRoles: {
           designerAgentId: designerAgent?.id || agents[0]?.id,
           designerModelId: designerRole?.assignedModelId || models[0]?.id,

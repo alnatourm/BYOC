@@ -45,32 +45,64 @@ export const RolesView: React.FC = () => {
         </button>
       </div>
 
-      {/* Role Pipeline Mapping Flow */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {roles.map((role) => {
+      {/* Role Pipeline Mapping Flow (4-Column Governance Grid) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {roles
+          .sort((a, b) => a.executionOrder - b.executionOrder)
+          .map((role) => {
           const currentAgent = agents.find((a) => a.id === role.assignedAgentId);
           const currentModel = models.find((m) => m.id === role.assignedModelId);
           const fallbackModel = models.find((m) => m.id === role.fallbackModelId);
+          const isManagedFactory = role.connectionMode === 'managed_factory';
 
           return (
             <div
               key={role.id}
-              className="p-6 bg-slate-900 rounded-xl border border-slate-800 hover:border-slate-700 transition flex flex-col justify-between space-y-5 shadow-lg relative group"
+              className="p-5 bg-slate-900 rounded-xl border border-slate-800 hover:border-slate-700 transition flex flex-col justify-between space-y-4 shadow-lg relative group"
             >
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {/* Role Header */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
-                    <h3 className="text-lg font-bold text-white font-display">{role.roleTitle}</h3>
+                    <h3 className="text-base font-bold text-white font-display">{role.roleTitle}</h3>
                   </div>
 
-                  <span className="px-2.5 py-0.5 text-[11px] font-mono text-indigo-300 bg-indigo-500/10 rounded border border-indigo-500/20">
-                    Step #{role.executionOrder + 1}
+                  <span className="px-2 py-0.5 text-[10px] font-mono text-indigo-300 bg-indigo-500/10 rounded border border-indigo-500/20">
+                    Step #{role.executionOrder}
                   </span>
                 </div>
 
-                <p className="text-xs text-slate-300 leading-relaxed">{role.description}</p>
+                <p className="text-xs text-slate-300 leading-relaxed min-h-[32px]">{role.description}</p>
+
+                {/* Connection Mode Toggle (BYOK Key vs Managed Platform Factory) */}
+                <div className="p-2 bg-slate-950 rounded-lg border border-slate-800 space-y-1">
+                  <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
+                    Role Connection Type
+                  </div>
+                  <div className="grid grid-cols-2 gap-1 font-mono text-[11px]">
+                    <button
+                      onClick={() => updateRole(role.id, { connectionMode: 'byok' })}
+                      className={`px-2 py-1 rounded text-center transition ${
+                        !isManagedFactory
+                          ? 'bg-indigo-600 text-white font-bold'
+                          : 'bg-slate-900 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      🔑 BYOK Key
+                    </button>
+                    <button
+                      onClick={() => updateRole(role.id, { connectionMode: 'managed_factory' })}
+                      className={`px-2 py-1 rounded text-center transition ${
+                        isManagedFactory
+                          ? 'bg-emerald-600 text-white font-bold'
+                          : 'bg-slate-900 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      ⚡ Managed
+                    </button>
+                  </div>
+                </div>
 
                 {/* Swappable Agent Mapping Dropdown */}
                 <div className="p-3 bg-slate-950 rounded-lg border border-slate-800 space-y-2">

@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useBYOK } from '../context/BYOKContext';
 import { ProjectArtifact } from '../types/byok';
 import { Layout, Code, ShieldCheck, Sparkles, Eye, ArrowUpRight, CheckCircle2, Layers, Cpu, Clock, Terminal, Plus, FolderPlus } from 'lucide-react';
+import { HumanApprovalGateBanner } from './HumanApprovalGateBanner';
+import { ProjectBrainGrid } from './ProjectBrainGrid';
 
 export const DashboardView: React.FC = () => {
   const { artifacts, agents, models, roles, setSelectedArtifact, setActiveTab, setIsCreateProjectOpen } = useBYOK();
@@ -22,35 +24,38 @@ export const DashboardView: React.FC = () => {
 
   return (
     <div className="space-y-8">
+      {/* Welcoming Human Approval Gate Banner */}
+      <HumanApprovalGateBanner />
+
       {/* Top Hero Banner & System Overview */}
-      <div className="p-6 md:p-8 bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950/40 rounded-2xl border border-slate-800/80 shadow-xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
+      <div className="p-6 md:p-8 bg-gradient-to-br from-slate-900 via-slate-900 to-orange-950/40 rounded-2xl border border-orange-950/40 shadow-xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-orange-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
 
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="max-w-3xl space-y-3">
-            <div className="flex items-center gap-2 text-xs text-indigo-400 font-mono">
-              <span>BYOK Orchestration Matrix</span>
+            <div className="flex items-center gap-2 text-xs text-orange-400 font-mono">
+              <span>OGroup AI Factory Platform</span>
+              <span>·</span>
+              <span>Bilingual Execution Runtime</span>
               <span>·</span>
               <span>Zero-Exposure Key Vault</span>
-              <span>·</span>
-              <span>Swappable Agent Engine</span>
             </div>
 
             <h1 className="text-3xl md:text-4xl font-extrabold text-white tracking-tight font-display text-wrap-balance">
-              Dashboard of Existing Designs & Developments Made
+              My Software / <span className="text-orange-400 font-bold">برمجياتي النشطة ✨</span>
             </h1>
 
             <p className="text-slate-300 text-sm md:text-base leading-relaxed">
-              Review design systems, full-stack TSX components, wireframes, and Q/C audits produced by your assigned worker agents and swappable models.
+              Friendly delivery tracking & live health for all active software systems built by your OGroup Factory.
             </p>
           </div>
 
           <button
             onClick={() => setIsCreateProjectOpen(true)}
-            className="px-5 py-3 text-xs font-extrabold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl shadow-lg transition flex items-center gap-2 shrink-0 self-start md:self-auto cursor-pointer"
+            className="px-5 py-3 text-xs font-extrabold text-white bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 rounded-xl shadow-lg transition flex items-center gap-2 shrink-0 self-start md:self-auto cursor-pointer"
           >
             <FolderPlus className="w-4 h-4" />
-            <span>+ Create New Project</span>
+            <span>+ Build Software / بناء جديد 🚀</span>
           </button>
         </div>
 
@@ -69,7 +74,7 @@ export const DashboardView: React.FC = () => {
             <div className="text-2xl md:text-3xl font-extrabold text-indigo-400 font-mono tabular-nums mt-1">
               {totalRolesConfigured}
             </div>
-            <div className="text-[11px] text-slate-500 mt-1">Designer · Developer · Q/C</div>
+            <div className="text-[11px] text-slate-500 mt-1">Designer · Developer · Q/C · Document Control</div>
           </div>
 
           <div className="p-4 bg-slate-950/60 rounded-xl border border-slate-800/80">
@@ -253,6 +258,9 @@ export const DashboardView: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Project Brain Section (عقل المشروع الدائم) */}
+      <ProjectBrainGrid />
 
       {/* CTA Banner to Test Swappable Roles */}
       <div className="p-6 bg-slate-900/60 rounded-xl border border-slate-800 flex flex-col md:flex-row items-center justify-between gap-4">

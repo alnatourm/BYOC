@@ -110,6 +110,16 @@ Output strictly valid JSON with keys:
 - accessibilityScore: number
 - securityScore: number
 - codeQualityScore: number`;
+    } else if (roleCategory === 'document_control') {
+      roleSystemPrompt = `You are a Lead Document Control Agent named ${roleTitle}.
+Directives: ${agentDirectives}
+Task: Generate an official Release Dossier and Document Control Register entry for: "${promptBrief}".
+Output strictly valid JSON with keys:
+- releaseNotes: string
+- dossierChecksum: string (e.g. "sha256:a91f...")
+- versionBadge: string (e.g. "v1.0.0-GA")
+- complianceChecked: boolean
+- approvalChain: Array of string`;
     } else {
       roleSystemPrompt = `You are an AI Agent worker operating as ${roleTitle}.
 Directives: ${agentDirectives}

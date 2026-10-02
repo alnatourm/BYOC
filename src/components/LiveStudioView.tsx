@@ -12,10 +12,12 @@ export const LiveStudioView: React.FC = () => {
   const designerRole = roles.find((r) => r.category === 'design' || r.roleTitle === 'Designer') || roles[0];
   const developerRole = roles.find((r) => r.category === 'dev' || r.roleTitle === 'Developer') || roles[1] || roles[0];
   const qcRole = roles.find((r) => r.category === 'qc' || r.roleTitle === 'Q/C') || roles[2] || roles[0];
+  const docRole = roles.find((r) => r.category === 'doc_control' || r.roleTitle === 'Document Control') || roles[3] || roles[0];
 
   const designerAgent = agents.find((a) => a.id === designerRole?.assignedAgentId);
   const developerAgent = agents.find((a) => a.id === developerRole?.assignedAgentId);
   const qcAgent = agents.find((a) => a.id === qcRole?.assignedAgentId);
+  const docAgent = agents.find((a) => a.id === docRole?.assignedAgentId);
 
   const presets = [
     {
@@ -128,23 +130,29 @@ export const LiveStudioView: React.FC = () => {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
             <div className="p-2.5 bg-slate-900 rounded border border-slate-800 space-y-1">
-              <div className="text-[10px] text-slate-500">1. Designer Role</div>
-              <div className="font-bold text-white">{designerAgent?.name || 'Aura-UI'}</div>
-              <div className="text-[10px] text-indigo-300 font-mono">Gemini 2.5 Flash</div>
+              <div className="text-[10px] text-slate-500 font-mono">1. Designer Role</div>
+              <div className="font-bold text-white">{designerAgent?.name || 'StitchCrafter-UI'}</div>
+              <div className="text-[10px] text-indigo-300 font-mono">Stitch Design 2.5 Pro</div>
             </div>
 
             <div className="p-2.5 bg-slate-900 rounded border border-slate-800 space-y-1">
-              <div className="text-[10px] text-slate-500">2. Developer Role</div>
+              <div className="text-[10px] text-slate-500 font-mono">2. Developer Role</div>
               <div className="font-bold text-white">{developerAgent?.name || 'CodeForge-TS'}</div>
               <div className="text-[10px] text-indigo-300 font-mono">Gemini 2.5 Flash</div>
             </div>
 
             <div className="p-2.5 bg-slate-900 rounded border border-slate-800 space-y-1">
-              <div className="text-[10px] text-slate-500">3. Q/C Auditor Role</div>
+              <div className="text-[10px] text-slate-500 font-mono">3. Q/C Auditor Role</div>
               <div className="font-bold text-emerald-400">{qcAgent?.name || 'Veritas-QC'}</div>
               <div className="text-[10px] text-indigo-300 font-mono">DeepSeek R1 Reasoning</div>
+            </div>
+
+            <div className="p-2.5 bg-slate-900 rounded border border-slate-800 space-y-1">
+              <div className="text-[10px] text-slate-500 font-mono">4. Document Control</div>
+              <div className="font-bold text-indigo-300">{docAgent?.name || 'DocuGuard-DC'}</div>
+              <div className="text-[10px] text-indigo-300 font-mono">Release Dossier Signoff</div>
             </div>
           </div>
         </div>
