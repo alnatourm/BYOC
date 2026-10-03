@@ -206,3 +206,25 @@ export interface OrchestrationStepLog {
   rawResponse?: string;
   durationMs: number;
 }
+
+export interface SaaSUser {
+  id: string;
+  name: string;
+  email: string;
+  role: 'super_admin' | 'client';
+  planId: string;
+  planName: string;
+  appsCreated: number;
+  status: 'active' | 'suspended';
+  joinedDate: string;
+}
+
+export interface SaaSPlan {
+  id: string;
+  name: string;
+  priceMonthlyUsd: number;
+  appsLimitPerMonth: number;
+  aiRunsLimitPerMonth: number;
+  features: string[];
+  isPopular?: boolean;
+}

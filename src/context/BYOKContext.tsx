@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Provider, Model, Agent, Role, ProjectArtifact, OrchestrationStepLog } from '../types/byok';
+import { Provider, Model, Agent, Role, ProjectArtifact, OrchestrationStepLog, SaaSUser, SaaSPlan } from '../types/byok';
 import { INITIAL_PROVIDERS, INITIAL_MODELS, INITIAL_AGENTS, INITIAL_ROLES, INITIAL_ARTIFACTS } from '../data/mockData';
 
 interface BYOKContextType {
@@ -8,8 +8,10 @@ interface BYOKContextType {
   agents: Agent[];
   roles: Role[];
   artifacts: ProjectArtifact[];
-  activeTab: 'dashboard' | 'roles' | 'agents' | 'models' | 'providers' | 'studio' | 'build';
-  setActiveTab: (tab: 'dashboard' | 'roles' | 'agents' | 'models' | 'providers' | 'studio' | 'build') => void;
+  saasUsers: SaaSUser[];
+  saasPlans: SaaSPlan[];
+  activeTab: 'dashboard' | 'roles' | 'agents' | 'models' | 'providers' | 'studio' | 'build' | 'admin';
+  setActiveTab: (tab: 'dashboard' | 'roles' | 'agents' | 'models' | 'providers' | 'studio' | 'build' | 'admin') => void;
   
   operatingMode: 'byok' | 'managed_factory';
   setOperatingMode: (mode: 'byok' | 'managed_factory') => void;
@@ -74,12 +76,28 @@ export const BYOKProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [agents, setAgents] = useState<Agent[]>(() => {
     const saved = localStorage.getItem('nexus_byok_agents');
-    return saved ? JSON.parse(saved) : INITIAL_AGENTS;
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed.some((a: any) => a.name.includes('Aura') || a.name.includes('Reactor') || a.name.includes('DocuGuard'))) {
+        localStorage.setItem('nexus_byok_agents', JSON.stringify(INITIAL_AGENTS));
+        return INITIAL_AGENTS;
+      }
+      return parsed;
+    }
+    return INITIAL_AGENTS;
   });
 
   const [roles, setRoles] = useState<Role[]>(() => {
     const saved = localStorage.getItem('nexus_byok_roles');
-    return saved ? JSON.parse(saved) : INITIAL_ROLES;
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed.some((r: any) => r.roleTitle.includes('Designer') && !r.roleTitle.includes('02.'))) {
+        localStorage.setItem('nexus_byok_roles', JSON.stringify(INITIAL_ROLES));
+        return INITIAL_ROLES;
+      }
+      return parsed;
+    }
+    return INITIAL_ROLES;
   });
 
   const [artifacts, setArtifacts] = useState<ProjectArtifact[]>(() => {
@@ -87,8 +105,73 @@ export const BYOKProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return saved ? JSON.parse(saved) : INITIAL_ARTIFACTS;
   });
 
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'roles' | 'agents' | 'models' | 'providers' | 'studio' | 'build'>('dashboard');
-  const [operatingMode, setOperatingMode] = useState<'byok' | 'managed_factory'>('byok');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'roles' | 'agents' | 'models' | 'providers' | 'studio' | 'build' | 'admin'>('dashboard');
+  const [operatingMode, setOperatingMode] = useState<'byok' | 'managed_factory'>('managed_factory');
+
+  // SaaS Admin State
+  const [saasUsers, setSaasUsers] = useState<SaaSUser[]>([
+    {
+      id: 'usr-1',
+      name: 'Tariq Al-Natour (Super Admin)',
+      email: 'alnatour.m@gmail.com',
+      role: 'super_admin',
+      planId: 'plan-ent',
+      planName: 'Enterprise Agency ($199/mo)',
+      appsCreated: 14,
+      status: 'active',
+      joinedDate: '2026-01-15',
+    },
+    {
+      id: 'usr-2',
+      name: 'Riyadh Logistics Ltd',
+      email: 'tech@riyadhlogistics.sa',
+      role: 'client',
+      planId: 'plan-pro',
+      planName: 'Pro Founder ($49/mo)',
+      appsCreated: 3,
+      status: 'active',
+      joinedDate: '2026-02-01',
+    },
+    {
+      id: 'usr-3',
+      name: 'Jeddah Retail Group',
+      email: 'ops@jeddahretail.sa',
+      role: 'client',
+      planId: 'plan-pro',
+      planName: 'Pro Founder ($49/mo)',
+      appsCreated: 5,
+      status: 'active',
+      joinedDate: '2026-02-18',
+    },
+  ]);
+
+  const [saasPlans, setSaasPlans] = useState<SaaSPlan[]>([
+    {
+      id: 'plan-free',
+      name: 'Free Starter',
+      priceMonthlyUsd: 0,
+      appsLimitPerMonth: 1,
+      aiRunsLimitPerMonth: 10,
+      features: ['1 Live App Preview', 'Google Stitch AI Canvas', 'Community Support'],
+    },
+    {
+      id: 'plan-pro',
+      name: 'Pro Founder',
+      priceMonthlyUsd: 49,
+      appsLimitPerMonth: 10,
+      aiRunsLimitPerMonth: 200,
+      features: ['10 Live Applications', 'Google Stitch AI Canvas', 'Custom Domain Binding', 'Source Code Export (TSX/React)', 'Priority AI Factory Queue'],
+      isPopular: true,
+    },
+    {
+      id: 'plan-ent',
+      name: 'Enterprise Agency',
+      priceMonthlyUsd: 199,
+      appsLimitPerMonth: 999,
+      aiRunsLimitPerMonth: 5000,
+      features: ['Unlimited Apps', 'Dedicated AI Factory Cluster', 'Custom Provider Key Integration', 'Full AST Code Access', 'White-Label Branding'],
+    },
+  ]);
   const [selectedArtifact, setSelectedArtifact] = useState<ProjectArtifact | null>(null);
 
   const [isAddProviderOpen, setIsAddProviderOpen] = useState(false);
@@ -530,6 +613,8 @@ export const BYOKProvider: React.FC<{ children: React.ReactNode }> = ({ children
         agents,
         roles,
         artifacts,
+        saasUsers,
+        saasPlans,
         activeTab,
         setActiveTab,
         operatingMode,

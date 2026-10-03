@@ -9,6 +9,7 @@ import { ModelsView } from './components/ModelsView';
 import { ProvidersView } from './components/ProvidersView';
 import { LiveStudioView } from './components/LiveStudioView';
 import { BuildSuiteView } from './components/BuildSuiteView';
+import { AdminPanelView } from './components/AdminPanelView';
 import { ArtifactInspectorModal } from './components/ArtifactInspectorModal';
 import { AddProviderModal } from './components/modals/AddProviderModal';
 import { AddModelModal } from './components/modals/AddModelModal';
@@ -37,6 +38,7 @@ function MainLayout() {
           {activeTab === 'models' && <ModelsView />}
           {activeTab === 'providers' && <ProvidersView />}
           {activeTab === 'studio' && <LiveStudioView />}
+          {activeTab === 'admin' && <AdminPanelView />}
         </main>
       </div>
 

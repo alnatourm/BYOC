@@ -53,6 +53,16 @@ export const TopHeader: React.FC = () => {
           <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#ea580c] ring-2 ring-white"></span>
         </button>
 
+        {/* Super Admin Switcher Badge */}
+        <button
+          onClick={() => setActiveTab('admin')}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#1c212c] text-amber-400 hover:bg-stone-800 border border-amber-500/40 font-bold text-xs shadow-xs transition-colors cursor-pointer"
+          title="Open SaaS Super Admin Control Panel"
+        >
+          <span className="material-symbols-outlined text-[16px]">admin_panel_settings</span>
+          <span>Super Admin Panel</span>
+        </button>
+
         {/* User Profile Badge */}
         <div className="flex items-center gap-2.5 pl-1 py-1 pr-3.5 rounded-full bg-white border border-[#e2ded8]/60 shadow-[0_1px_4px_rgba(0,0,0,0.04)]">
           <div className="w-7 h-7 rounded-full bg-orange-100 border border-orange-200 flex items-center justify-center font-bold text-xs text-[#ea580c]">

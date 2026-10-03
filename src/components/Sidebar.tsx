@@ -2,11 +2,12 @@ import React from 'react';
 import { useBYOK } from '../context/BYOKContext';
 
 interface NavItem {
-  id: 'dashboard' | 'roles' | 'build' | 'agents' | 'providers' | 'models' | 'studio';
+  id: 'dashboard' | 'roles' | 'build' | 'agents' | 'providers' | 'models' | 'studio' | 'admin';
   icon: string;
   titleEn: string;
   titleAr: string;
   isHighlight?: boolean;
+  isAdmin?: boolean;
   subItems?: Array<{ id: 'agents' | 'providers' | 'studio'; label: string; dotColor: string }>;
 }
 
@@ -30,6 +31,7 @@ export const Sidebar: React.FC = () => {
     },
     { id: 'providers', icon: 'pie_chart', titleEn: 'Usage & Billing', titleAr: 'الفوترة' },
     { id: 'models', icon: 'settings', titleEn: 'Settings', titleAr: 'الإعدادات' },
+    { id: 'admin', icon: 'admin_panel_settings', titleEn: 'Super Admin', titleAr: 'لوحة المشرف 🔑', isAdmin: true },
   ];
 
   return (
@@ -73,6 +75,28 @@ export const Sidebar: React.FC = () => {
                     <span className="text-white font-extrabold">{item.titleEn}</span>
                   </div>
                   <span className="text-[11px] font-semibold text-orange-100 font-sans">{item.titleAr}</span>
+                </button>
+              );
+            }
+
+            if (item.isAdmin) {
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveTab('admin')}
+                  className={`flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl transition-all text-xs font-bold cursor-pointer mt-2 ${
+                    isActive
+                      ? 'bg-[#1c212c] text-amber-400 border border-amber-500/50 shadow-md ring-1 ring-amber-400'
+                      : 'bg-[#1c212c]/90 text-stone-200 hover:bg-[#1c212c] border border-stone-800'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="material-symbols-outlined text-[20px] text-amber-400">
+                      {item.icon}
+                    </span>
+                    <span className="text-white font-bold">{item.titleEn}</span>
+                  </div>
+                  <span className="text-[11px] font-semibold text-amber-400 font-sans">{item.titleAr}</span>
                 </button>
               );
             }
