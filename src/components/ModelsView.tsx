@@ -1,57 +1,58 @@
 import React from 'react';
 import { useBYOK } from '../context/BYOKContext';
-import { Plus, Cpu, Zap, Shield, Eye, Code, Wrench, Trash2 } from 'lucide-react';
 
 export const ModelsView: React.FC = () => {
   const { models, providers, deleteModel, setIsAddModelOpen } = useBYOK();
 
   return (
-    <div className="space-y-8">
-      {/* View Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="flex flex-col w-full pb-16 font-sans text-[#1c212c]">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-4 mb-4">
         <div>
-          <div className="flex items-center gap-2 text-xs text-indigo-400 font-mono mb-1">
-            <span>Model Registry</span>
-            <span>·</span>
-            <span>Provider Capabilities</span>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="px-2.5 py-0.5 rounded-full bg-orange-100 font-bold text-xs text-[#ea580c]">
+              ⚡ System Settings & Intelligence Registry
+            </span>
+            <span className="text-[#948374]">•</span>
+            <span className="text-xs text-[#576071] font-medium">الإعدادات وسجل النماذج الذكية</span>
           </div>
-          <h1 className="text-2xl md:text-3xl font-extrabold text-white font-display">
-            Models Catalog
+          <h1 className="font-display text-3xl font-extrabold text-[#1c212c] tracking-tight">
+            Settings & Model Catalog / الإعدادات
           </h1>
-          <p className="text-xs md:text-sm text-slate-300 mt-1 max-w-2xl">
-            <strong className="text-white">Models belong to providers</strong> and expose capabilities to worker agents.
+          <p className="text-xs md:text-sm text-[#576071] mt-1 max-w-2xl font-medium">
+            Manage global AI model catalogs, context windows, token pricing limits, and provider bindings.
           </p>
         </div>
 
         <button
           onClick={() => setIsAddModelOpen(true)}
-          className="px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-sm transition flex items-center gap-1.5 self-start sm:self-auto"
+          className="px-5 py-2.5 rounded-xl bg-[#ea580c] hover:bg-orange-700 text-white font-bold text-xs transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer self-start md:self-auto"
         >
-          <Plus className="w-4 h-4" />
-          <span>Add Model</span>
+          <span className="material-symbols-outlined text-[18px]">add</span>
+          <span>Add Custom Model / إضافة نموذج</span>
         </button>
       </div>
 
-      {/* Models Table / Cards */}
+      {/* Models Grouped by Provider */}
       <div className="space-y-6">
         {providers.map((provider) => {
           const providerModels = models.filter((m) => m.providerId === provider.id || m.providerName === provider.name);
 
           return (
-            <div key={provider.id} className="bg-slate-900 rounded-xl border border-slate-800 p-5 space-y-4 shadow-lg">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 font-bold text-xs font-mono">
+            <div key={provider.id} className="bg-white rounded-2xl border border-[#e2d9d2]/70 p-6 shadow-sm space-y-4">
+              <div className="flex items-center justify-between border-b border-[#e2d9d2]/50 pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-orange-100 flex items-center justify-center text-[#ea580c] font-display font-bold text-sm">
                     {provider.type.substring(0, 2).toUpperCase()}
                   </div>
                   <div>
-                    <h3 className="text-base font-bold text-white font-display">{provider.name}</h3>
-                    <div className="text-xs text-slate-400 font-mono">Vault ID: {provider.vaultKeyId}</div>
+                    <h3 className="font-display font-bold text-lg text-[#1c212c]">{provider.name}</h3>
+                    <div className="text-xs font-mono text-[#948374]">Vault ID: {provider.vaultKeyId}</div>
                   </div>
                 </div>
 
-                <span className="text-xs font-mono text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded">
-                  {providerModels.length} Models
+                <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
+                  {providerModels.length} Models Registered
                 </span>
               </div>
 
@@ -60,55 +61,51 @@ export const ModelsView: React.FC = () => {
                   {providerModels.map((model) => (
                     <div
                       key={model.id}
-                      className="p-4 bg-slate-950/80 rounded-lg border border-slate-800 hover:border-slate-700 transition space-y-3"
+                      className="p-4 bg-[#f9f8f6] rounded-xl border border-[#e2d9d2]/60 hover:border-[#ea580c]/50 transition-all flex flex-col justify-between gap-3 group"
                     >
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <div className="text-sm font-bold text-white font-display">{model.name}</div>
-                          <div className="text-[11px] font-mono text-indigo-300 mt-0.5">{model.modelIdentifier}</div>
+                      <div className="space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <h4 className="font-display font-bold text-sm text-[#1c212c] group-hover:text-[#ea580c] transition-colors">
+                            {model.name}
+                          </h4>
+                          <button
+                            onClick={() => deleteModel(model.id)}
+                            className="text-[#948374] hover:text-red-600 transition-colors p-1"
+                            title="Delete model"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">delete</span>
+                          </button>
                         </div>
-
-                        <button
-                          onClick={() => deleteModel(model.id)}
-                          className="text-slate-500 hover:text-rose-400 transition"
-                          title="Delete model"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="text-[11px] font-mono text-[#887364] bg-white px-2 py-0.5 rounded border border-[#e2d9d2]/50 inline-block">
+                          {model.modelIdentifier}
+                        </div>
                       </div>
 
-                      {/* Capabilities */}
-                      <div className="flex flex-wrap gap-1">
-                        {model.capabilities.map((cap, idx) => (
-                          <span
-                            key={idx}
-                            className="px-2 py-0.5 text-[10px] font-mono text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 rounded"
-                          >
+                      <div className="space-y-1.5 text-xs text-[#576071] border-t border-[#e2d9d2]/40 pt-2 font-medium">
+                        <div className="flex justify-between">
+                          <span>Context Window:</span>
+                          <strong className="text-[#1c212c] font-mono">{(model.contextWindow / 1000).toFixed(0)}k tokens</strong>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Cost per 1M Input:</span>
+                          <strong className="text-[#1c212c] font-mono">${model.costPer1kInputUsd ? (model.costPer1kInputUsd * 1000).toFixed(2) : '0.00'}</strong>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-1 pt-1">
+                        {model.capabilities?.map((cap, idx) => (
+                          <span key={idx} className="text-[10px] bg-orange-50 text-[#ea580c] font-bold px-2 py-0.5 rounded border border-orange-200">
                             {cap}
                           </span>
                         ))}
-                      </div>
-
-                      {/* Spec metrics */}
-                      <div className="pt-2 border-t border-slate-800/80 grid grid-cols-2 gap-2 text-[11px] font-mono text-slate-400">
-                        <div>
-                          <span className="text-slate-500">Context:</span> {(model.contextWindow / 1000).toFixed(0)}k
-                        </div>
-                        <div>
-                          <span className="text-slate-500">Latency:</span> {model.latencyMs}ms
-                        </div>
-                        <div>
-                          <span className="text-slate-500">Input 1k:</span> ${model.costPer1kInputUsd}
-                        </div>
-                        <div>
-                          <span className="text-slate-500">Output 1k:</span> ${model.costPer1kOutputUsd}
-                        </div>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-slate-500 italic py-2">No models registered for this provider yet.</p>
+                <div className="p-4 text-center text-xs text-[#948374] italic">
+                  No models attached to this provider yet.
+                </div>
               )}
             </div>
           );

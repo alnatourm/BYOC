@@ -8,8 +8,8 @@ interface BYOKContextType {
   agents: Agent[];
   roles: Role[];
   artifacts: ProjectArtifact[];
-  activeTab: 'dashboard' | 'roles' | 'agents' | 'models' | 'providers' | 'studio';
-  setActiveTab: (tab: 'dashboard' | 'roles' | 'agents' | 'models' | 'providers' | 'studio') => void;
+  activeTab: 'dashboard' | 'roles' | 'agents' | 'models' | 'providers' | 'studio' | 'build';
+  setActiveTab: (tab: 'dashboard' | 'roles' | 'agents' | 'models' | 'providers' | 'studio' | 'build') => void;
   
   operatingMode: 'byok' | 'managed_factory';
   setOperatingMode: (mode: 'byok' | 'managed_factory') => void;
@@ -87,7 +87,7 @@ export const BYOKProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return saved ? JSON.parse(saved) : INITIAL_ARTIFACTS;
   });
 
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'roles' | 'agents' | 'models' | 'providers' | 'studio'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'roles' | 'agents' | 'models' | 'providers' | 'studio' | 'build'>('dashboard');
   const [operatingMode, setOperatingMode] = useState<'byok' | 'managed_factory'>('byok');
   const [selectedArtifact, setSelectedArtifact] = useState<ProjectArtifact | null>(null);
 

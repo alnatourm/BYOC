@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
 import { useBYOK } from '../../context/BYOKContext';
 import { ProviderType } from '../../types/byok';
-import { X, Lock, ShieldCheck } from 'lucide-react';
 
 export const AddProviderModal: React.FC = () => {
   const { isAddProviderOpen, setIsAddProviderOpen, addProvider } = useBYOK();
 
-  const [name, setName] = useState('');
+  const [name, setName] = useState('Google Gemini AI');
   const [type, setType] = useState<ProviderType>('gemini');
   const [baseUrl, setBaseUrl] = useState('https://generativelanguage.googleapis.com');
   const [secret, setSecret] = useState('');
@@ -32,15 +31,12 @@ export const AddProviderModal: React.FC = () => {
     } else if (newType === 'deepseek') {
       setBaseUrl('https://api.deepseek.com/v1');
       setName('DeepSeek AI');
-    } else if (newType === 'stitch') {
-      setBaseUrl('https://stitch.google.com/api/v1');
-      setName('Google Stitch AI');
     } else if (newType === 'ollama') {
       setBaseUrl('http://localhost:11434');
       setName('Local Ollama Cluster');
     } else {
       setBaseUrl('https://my-custom-llm-proxy.internal');
-      setName('Custom VLLM Endpoint');
+      setName('Custom Endpoint');
     }
   };
 
@@ -54,114 +50,99 @@ export const AddProviderModal: React.FC = () => {
         name,
         type,
         baseUrl,
-        vaultKeyId: '',
-        maskedSecret: '',
+        maskedSecret: secret ? `sk-${secret.slice(-4)}` : '••••••••',
+        rateLimitRpm: rateLimit,
+        vaultKeyId: `vault_${Date.now()}`,
         isSecretInVault: true,
         status: 'active',
-        rateLimitRpm: rateLimit,
       },
       secret
     );
-
     setIsSubmitting(false);
     setIsAddProviderOpen(false);
-    setName('');
     setSecret('');
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden p-6 space-y-5">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-          <div className="flex items-center gap-2">
-            <Lock className="w-5 h-5 text-indigo-400" />
-            <h2 className="text-lg font-bold text-white font-display">Add BYOK Provider</h2>
+    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 font-sans text-[#1c212c]">
+      <div className="bg-white rounded-2xl p-6 md:p-8 max-w-lg w-full border border-[#e2d9d2] shadow-2xl relative space-y-5">
+        <div className="flex items-center justify-between border-b border-[#e2d9d2]/60 pb-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center text-[#ea580c]">
+              <span className="material-symbols-outlined text-[24px]">key</span>
+            </div>
+            <div>
+              <h3 className="font-display font-bold text-lg text-[#1c212c]">Add AI Provider / إضافة مزود</h3>
+              <p className="text-xs text-[#948374]">AES-256 Encrypted Key Vault Injection</p>
+            </div>
           </div>
 
-          <button onClick={() => setIsAddProviderOpen(false)} className="text-slate-400 hover:text-white">
-            <X className="w-5 h-5" />
+          <button
+            onClick={() => setIsAddProviderOpen(false)}
+            className="text-[#948374] hover:text-[#1c212c] transition-colors p-1"
+          >
+            <span className="material-symbols-outlined text-[20px]">close</span>
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-          <div>
-            <label className="block text-slate-300 font-medium mb-1">Provider Preset</label>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-[#1c212c]">Provider Type / نوع المزود</label>
             <select
               value={type}
               onChange={(e) => handleTypeChange(e.target.value as ProviderType)}
-              className="w-full bg-slate-950 text-white border border-slate-700 rounded-lg p-2.5 focus:ring-1 focus:ring-indigo-500"
+              className="w-full bg-[#f9f8f6] border border-[#e2d9d2]/70 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-[#1c212c] outline-none focus:border-[#ea580c] cursor-pointer"
             >
               <option value="gemini">Google Gemini AI</option>
-              <option value="stitch">Google Stitch AI (Design Engine)</option>
               <option value="openai">OpenAI Enterprise</option>
               <option value="anthropic">Anthropic Claude</option>
-              <option value="groq">Groq Cloud LPU</option>
+              <option value="groq">Groq LPU Engine</option>
               <option value="deepseek">DeepSeek AI</option>
-              <option value="ollama">Local Ollama / vLLM</option>
-              <option value="custom">Custom Endpoint</option>
+              <option value="ollama">Local Ollama Node</option>
+              <option value="custom">Custom Endpoint / Proxy</option>
             </select>
           </div>
 
-          <div>
-            <label className="block text-slate-300 font-medium mb-1">Provider Label / Name</label>
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-[#1c212c]">Display Name / الاسم</label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
-              className="w-full bg-slate-950 text-white border border-slate-700 rounded-lg p-2.5 focus:ring-1 focus:ring-indigo-500"
+              className="w-full bg-[#f9f8f6] border border-[#e2d9d2]/70 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-[#1c212c] outline-none focus:border-[#ea580c]"
             />
           </div>
 
-          <div>
-            <label className="block text-slate-300 font-medium mb-1">Base URL Endpoint</label>
-            <input
-              type="text"
-              value={baseUrl}
-              onChange={(e) => setBaseUrl(e.target.value)}
-              required
-              className="w-full bg-slate-950 text-white border border-slate-700 rounded-lg p-2.5 font-mono focus:ring-1 focus:ring-indigo-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-slate-300 font-medium mb-1">API Key / Secret (Encrypted in Vault)</label>
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-[#1c212c]">API Key / المفتاح المشفر</label>
             <input
               type="password"
               value={secret}
               onChange={(e) => setSecret(e.target.value)}
-              placeholder="e.g. sk-proj-••••••••"
-              className="w-full bg-slate-950 text-white border border-slate-700 rounded-lg p-2.5 font-mono focus:ring-1 focus:ring-indigo-500"
+              placeholder="sk-••••••••••••••••••••"
+              className="w-full bg-[#f9f8f6] border border-[#e2d9d2]/70 rounded-xl px-3.5 py-2.5 text-xs font-mono text-[#1c212c] outline-none focus:border-[#ea580c]"
             />
-            <p className="text-[10px] text-slate-500 mt-1 italic">
-              "Provider metadata only. Secrets stay in the encrypted server vault."
-            </p>
+            <span className="text-[10px] text-emerald-700 font-semibold block pt-0.5">
+              🔒 Encrypted directly into KMS Vault. Zero plaintext client storage.
+            </span>
           </div>
 
-          <div>
-            <label className="block text-slate-300 font-medium mb-1">Rate Limit (RPM)</label>
-            <input
-              type="number"
-              value={rateLimit}
-              onChange={(e) => setRateLimit(Number(e.target.value))}
-              className="w-full bg-slate-950 text-white border border-slate-700 rounded-lg p-2.5 font-mono focus:ring-1 focus:ring-indigo-500"
-            />
-          </div>
-
-          <div className="pt-3 border-t border-slate-800 flex justify-end gap-2">
+          <div className="flex items-center justify-end gap-3 pt-2">
             <button
               type="button"
               onClick={() => setIsAddProviderOpen(false)}
-              className="px-4 py-2 text-slate-400 hover:text-white bg-slate-800 rounded-lg"
+              className="px-4 py-2.5 rounded-xl bg-[#f5f3ef] hover:bg-[#e8e3dc] text-xs font-bold text-[#1c212c] cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-4 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition"
+              className="px-6 py-2.5 rounded-xl bg-[#ea580c] hover:bg-orange-700 text-white font-bold text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer"
             >
-              {isSubmitting ? 'Encrypting...' : 'Seal in Server Vault'}
+              <span className="material-symbols-outlined text-[18px]">add_moderator</span>
+              <span>{isSubmitting ? 'Injecting Key...' : 'Save & Encrypt Key / حفظ'}</span>
             </button>
           </div>
         </form>

@@ -2,14 +2,16 @@
 
 @layer base {
   :root {
-    --font-sans: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
-    --font-display: 'Outfit', 'Manrope', sans-serif;
+    --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-display: 'Outfit', 'Plus Jakarta Sans', sans-serif;
     --font-mono: 'JetBrains Mono', monospace;
   }
 }
 
 body {
   font-family: var(--font-sans);
+  background-color: #f8f7f5;
+  color: #1e2229;
 }
 
 h1, h2, h3, .font-display {

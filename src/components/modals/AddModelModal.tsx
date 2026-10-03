@@ -1,29 +1,19 @@
 import React, { useState } from 'react';
 import { useBYOK } from '../../context/BYOKContext';
-import { ModelCapability } from '../../types/byok';
-import { X, Cpu } from 'lucide-react';
 
 export const AddModelModal: React.FC = () => {
   const { isAddModelOpen, setIsAddModelOpen, providers, addModel } = useBYOK();
 
   const [providerId, setProviderId] = useState(providers[0]?.id || '');
   const [name, setName] = useState('');
-  const [modelIdentifier, setModelIdentifier] = useState('');
+  const [apiModelId, setApiModelId] = useState('');
   const [contextWindow, setContextWindow] = useState(128000);
-  const [latencyMs, setLatencyMs] = useState(250);
-  const [capabilities, setCapabilities] = useState<ModelCapability[]>(['code', 'function_calling']);
 
   if (!isAddModelOpen) return null;
 
-  const toggleCapability = (cap: ModelCapability) => {
-    setCapabilities((prev) =>
-      prev.includes(cap) ? prev.filter((c) => c !== cap) : [...prev, cap]
-    );
-  };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !modelIdentifier.trim()) return;
+    if (!name.trim() || !apiModelId.trim()) return;
 
     const provider = providers.find((p) => p.id === providerId) || providers[0];
 
@@ -31,129 +21,107 @@ export const AddModelModal: React.FC = () => {
       providerId: provider.id,
       providerName: provider.name,
       name,
-      modelIdentifier,
-      capabilities,
+      modelIdentifier: apiModelId,
+      capabilities: ['code', 'function_calling', 'reasoning'],
       contextWindow,
       maxOutputTokens: 8192,
       costPer1kInputUsd: 0.001,
       costPer1kOutputUsd: 0.002,
-      latencyMs,
+      latencyMs: 250,
       status: 'available',
     });
 
     setIsAddModelOpen(false);
     setName('');
-    setModelIdentifier('');
+    setApiModelId('');
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden p-6 space-y-5">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-          <div className="flex items-center gap-2">
-            <Cpu className="w-5 h-5 text-indigo-400" />
-            <h2 className="text-lg font-bold text-white font-display">Add Model to Provider</h2>
+    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 font-sans text-[#1c212c]">
+      <div className="bg-white rounded-2xl p-6 md:p-8 max-w-lg w-full border border-[#e2d9d2] shadow-2xl relative space-y-5">
+        <div className="flex items-center justify-between border-b border-[#e2d9d2]/60 pb-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center text-[#ea580c]">
+              <span className="material-symbols-outlined text-[24px]">psychology</span>
+            </div>
+            <div>
+              <h3 className="font-display font-bold text-lg text-[#1c212c]">Add Custom Model / إضافة نموذج</h3>
+              <p className="text-xs text-[#948374]">Register Model Capabilities to Provider</p>
+            </div>
           </div>
 
-          <button onClick={() => setIsAddModelOpen(false)} className="text-slate-400 hover:text-white">
-            <X className="w-5 h-5" />
+          <button
+            onClick={() => setIsAddModelOpen(false)}
+            className="text-[#948374] hover:text-[#1c212c] transition-colors p-1"
+          >
+            <span className="material-symbols-outlined text-[20px]">close</span>
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-          <div>
-            <label className="block text-slate-300 font-medium mb-1">Belongs to Provider</label>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-[#1c212c]">Provider Binding / المزود</label>
             <select
               value={providerId}
               onChange={(e) => setProviderId(e.target.value)}
-              className="w-full bg-slate-950 text-white border border-slate-700 rounded-lg p-2.5"
+              className="w-full bg-[#f9f8f6] border border-[#e2d9d2]/70 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-[#1c212c] outline-none focus:border-[#ea580c] cursor-pointer"
             >
               {providers.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name}
+                  {p.name} ({p.type})
                 </option>
               ))}
             </select>
           </div>
 
-          <div>
-            <label className="block text-slate-300 font-medium mb-1">Model Name</label>
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-[#1c212c]">Model Title / اسم النموذج</label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Gemini 2.5 Flash, GPT-4o, Claude Sonnet"
+              placeholder="e.g. Claude 3.5 Sonnet v2"
               required
-              className="w-full bg-slate-950 text-white border border-slate-700 rounded-lg p-2.5"
+              className="w-full bg-[#f9f8f6] border border-[#e2d9d2]/70 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-[#1c212c] outline-none focus:border-[#ea580c]"
             />
           </div>
 
-          <div>
-            <label className="block text-slate-300 font-medium mb-1">API Identifier String</label>
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-[#1c212c]">API Model ID / معرف API</label>
             <input
               type="text"
-              value={modelIdentifier}
-              onChange={(e) => setModelIdentifier(e.target.value)}
-              placeholder="e.g. gemini-2.5-flash"
+              value={apiModelId}
+              onChange={(e) => setApiModelId(e.target.value)}
+              placeholder="e.g. claude-3-5-sonnet-20241022"
               required
-              className="w-full bg-slate-950 text-white border border-slate-700 font-mono rounded-lg p-2.5"
+              className="w-full bg-[#f9f8f6] border border-[#e2d9d2]/70 rounded-xl px-3.5 py-2.5 text-xs font-mono text-[#1c212c] outline-none focus:border-[#ea580c]"
             />
           </div>
 
-          <div>
-            <label className="block text-slate-300 font-medium mb-1">Capabilities Exposed to Agents</label>
-            <div className="flex flex-wrap gap-2 pt-1">
-              {(['code', 'vision', 'function_calling', 'reasoning', 'image_gen', 'multimodal', 'fast_inference'] as ModelCapability[]).map((cap) => (
-                <button
-                  key={cap}
-                  type="button"
-                  onClick={() => toggleCapability(cap)}
-                  className={`px-2.5 py-1 text-[11px] font-mono rounded border transition ${
-                    capabilities.includes(cap)
-                      ? 'bg-indigo-600 text-white border-indigo-500 font-semibold'
-                      : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700'
-                  }`}
-                >
-                  {cap}
-                </button>
-              ))}
-            </div>
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-[#1c212c]">Context Window (Tokens)</label>
+            <input
+              type="number"
+              value={contextWindow}
+              onChange={(e) => setContextWindow(Number(e.target.value))}
+              className="w-full bg-[#f9f8f6] border border-[#e2d9d2]/70 rounded-xl px-3.5 py-2.5 text-xs font-mono text-[#1c212c] outline-none focus:border-[#ea580c]"
+            />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-slate-300 font-medium mb-1">Context Window</label>
-              <input
-                type="number"
-                value={contextWindow}
-                onChange={(e) => setContextWindow(Number(e.target.value))}
-                className="w-full bg-slate-950 text-white border border-slate-700 rounded-lg p-2.5 font-mono"
-              />
-            </div>
-            <div>
-              <label className="block text-slate-300 font-medium mb-1">Target Latency (ms)</label>
-              <input
-                type="number"
-                value={latencyMs}
-                onChange={(e) => setLatencyMs(Number(e.target.value))}
-                className="w-full bg-slate-950 text-white border border-slate-700 rounded-lg p-2.5 font-mono"
-              />
-            </div>
-          </div>
-
-          <div className="pt-3 border-t border-slate-800 flex justify-end gap-2">
+          <div className="flex items-center justify-end gap-3 pt-2">
             <button
               type="button"
               onClick={() => setIsAddModelOpen(false)}
-              className="px-4 py-2 text-slate-400 hover:text-white bg-slate-800 rounded-lg"
+              className="px-4 py-2.5 rounded-xl bg-[#f5f3ef] hover:bg-[#e8e3dc] text-xs font-bold text-[#1c212c] cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition"
+              className="px-6 py-2.5 rounded-xl bg-[#ea580c] hover:bg-orange-700 text-white font-bold text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer"
             >
-              Add Model
+              <span className="material-symbols-outlined text-[18px]">add</span>
+              <span>Register Model / إضافة النموذج</span>
             </button>
           </div>
         </form>

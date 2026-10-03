@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import { useBYOK } from '../context/BYOKContext';
-import { Sparkles, Play, CheckCircle2, Loader2, ArrowRight, Layers, Eye, Cpu, ShieldCheck, Terminal } from 'lucide-react';
 
 export const LiveStudioView: React.FC = () => {
-  const { roles, agents, models, runTeamOrchestration, isOrchestrating, orchestrationLogs, setActiveTab, setSelectedArtifact } = useBYOK();
+  const { roles, agents, runTeamOrchestration, isOrchestrating, orchestrationLogs, setActiveTab, setSelectedArtifact } = useBYOK();
 
   const [briefTitle, setBriefTitle] = useState('Pulse Health AI Patient Vital Dashboard');
   const [briefPrompt, setBriefPrompt] = useState('Design and develop a modern patient vitals monitoring portal for intensive care, including heart rate sparklines, oxygen saturation, encrypted vault key status, and active medical agent alerts.');
@@ -12,12 +11,6 @@ export const LiveStudioView: React.FC = () => {
   const designerRole = roles.find((r) => r.category === 'design' || r.roleTitle === 'Designer') || roles[0];
   const developerRole = roles.find((r) => r.category === 'dev' || r.roleTitle === 'Developer') || roles[1] || roles[0];
   const qcRole = roles.find((r) => r.category === 'qc' || r.roleTitle === 'Q/C') || roles[2] || roles[0];
-  const docRole = roles.find((r) => r.category === 'doc_control' || r.roleTitle === 'Document Control') || roles[3] || roles[0];
-
-  const designerAgent = agents.find((a) => a.id === designerRole?.assignedAgentId);
-  const developerAgent = agents.find((a) => a.id === developerRole?.assignedAgentId);
-  const qcAgent = agents.find((a) => a.id === qcRole?.assignedAgentId);
-  const docAgent = agents.find((a) => a.id === docRole?.assignedAgentId);
 
   const presets = [
     {
@@ -47,157 +40,127 @@ export const LiveStudioView: React.FC = () => {
   };
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto">
+    <div className="flex flex-col w-full pb-16 font-sans text-[#1c212c]">
       {/* Header */}
-      <div>
-        <div className="flex items-center gap-2 text-xs text-indigo-400 font-mono mb-1">
-          <span>Live Execution Engine</span>
-          <span>·</span>
-          <span>Multi-Agent Pipeline</span>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-4 mb-4">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="px-2.5 py-0.5 rounded-full bg-orange-100 font-bold text-xs text-[#ea580c]">
+              🖥️ Advanced Engineering Console & Live Telemetry
+            </span>
+            <span className="text-[#948374]">•</span>
+            <span className="text-xs text-[#576071] font-medium">غرفة التحكم الهندسي والتشغيل اللحظي</span>
+          </div>
+          <h1 className="font-display text-3xl font-extrabold text-[#1c212c] tracking-tight">
+            Advanced Engineering Console
+          </h1>
+          <p className="text-xs md:text-sm text-[#576071] mt-1 max-w-2xl font-medium">
+            Inspect AST code generation, multi-agent step execution, live token telemetry, and pipeline diffs.
+          </p>
         </div>
-        <h1 className="text-2xl md:text-3xl font-extrabold text-white font-display">
-          Live Team Role Orchestrator
-        </h1>
-        <p className="text-xs md:text-sm text-slate-300 mt-1">
-          Test your mapped Designer, Developer, and Q/C roles live. The workflow executes sequentially and publishes the output directly to the Dashboard.
-        </p>
+
+        <button
+          onClick={() => setActiveTab('build')}
+          className="px-5 py-2.5 rounded-xl bg-[#ea580c] hover:bg-orange-700 text-white font-bold text-xs transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer self-start md:self-auto"
+        >
+          <span className="material-symbols-outlined text-[18px]">auto_awesome</span>
+          <span>Launch Build Suite / ابدأ البناء</span>
+        </button>
       </div>
 
-      {/* Preset Prompts Selector */}
-      <div className="space-y-2">
-        <div className="text-xs font-semibold text-slate-400">Quick Prompt Presets:</div>
+      {/* Preset Prompt Buttons */}
+      <div className="bg-white rounded-2xl border border-[#e2d9d2]/70 p-6 shadow-sm mb-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <span className="font-display text-sm font-bold text-[#1c212c] flex items-center gap-2">
+            <span className="material-symbols-outlined text-[#ea580c] text-[18px]">lightbulb</span>
+            Engineering Presets / النماذج الهندسية الجاهزة
+          </span>
+          <span className="text-xs text-[#948374] font-medium">Click to populate specification</span>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {presets.map((preset, idx) => (
+          {presets.map((p, idx) => (
             <button
               key={idx}
               onClick={() => {
-                setBriefTitle(preset.title);
-                setCategory(preset.category);
-                setBriefPrompt(preset.prompt);
+                setBriefTitle(p.title);
+                setCategory(p.category);
+                setBriefPrompt(p.prompt);
               }}
-              className="p-3 bg-slate-900/80 hover:bg-slate-900 border border-slate-800 hover:border-indigo-500/50 rounded-xl text-left transition space-y-1 group"
+              className="p-3.5 rounded-xl bg-[#f9f8f6] hover:bg-orange-50 border border-[#e2d9d2]/60 hover:border-orange-200 text-left transition-all cursor-pointer group"
             >
-              <div className="text-xs font-bold text-white group-hover:text-indigo-300">{preset.title}</div>
-              <div className="text-[11px] text-slate-400 line-clamp-2">{preset.prompt}</div>
+              <div className="text-xs font-bold text-[#1c212c] group-hover:text-[#ea580c] transition-colors">{p.title}</div>
+              <div className="text-[10px] text-[#887364] mt-0.5">{p.category}</div>
             </button>
           ))}
         </div>
       </div>
 
-      {/* Brief Form */}
-      <div className="p-6 bg-slate-900 rounded-xl border border-slate-800 space-y-5 shadow-lg">
+      {/* Interactive Form */}
+      <div className="bg-white rounded-2xl border border-[#e2d9d2]/70 p-6 shadow-sm space-y-4 mb-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">Deliverable Title</label>
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-[#1c212c]">Project Name / اسم المشروع</label>
             <input
               type="text"
               value={briefTitle}
               onChange={(e) => setBriefTitle(e.target.value)}
-              className="w-full bg-slate-950 text-xs text-white border border-slate-700 rounded-lg p-2.5 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full bg-[#f9f8f6] border border-[#e2d9d2]/70 rounded-xl px-3.5 py-2.5 text-xs text-[#1c212c] font-semibold outline-none focus:border-[#ea580c]"
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">Category Taxonomy</label>
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-[#1c212c]">Category / التصنيف</label>
             <input
               type="text"
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              className="w-full bg-slate-950 text-xs text-white border border-slate-700 rounded-lg p-2.5 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full bg-[#f9f8f6] border border-[#e2d9d2]/70 rounded-xl px-3.5 py-2.5 text-xs text-[#1c212c] font-semibold outline-none focus:border-[#ea580c]"
             />
           </div>
         </div>
 
-        <div>
-          <label className="block text-xs font-semibold text-slate-300 mb-1">Detailed Brief & Requirements</label>
+        <div className="space-y-1">
+          <label className="text-xs font-bold text-[#1c212c]">Technical Specification / التفاصيل الهندسية</label>
           <textarea
             value={briefPrompt}
             onChange={(e) => setBriefPrompt(e.target.value)}
-            rows={3}
-            className="w-full bg-slate-950 text-xs text-white border border-slate-700 rounded-lg p-3 focus:ring-1 focus:ring-indigo-500 focus:outline-none font-sans leading-relaxed"
+            rows={4}
+            className="w-full bg-[#f9f8f6] border border-[#e2d9d2]/70 rounded-xl p-3.5 text-xs text-[#1c212c] font-medium outline-none focus:border-[#ea580c] resize-none"
           />
         </div>
 
-        {/* Assigned Team Summary */}
-        <div className="p-4 bg-slate-950 rounded-lg border border-slate-800 space-y-3">
-          <div className="text-xs font-semibold text-slate-300 flex items-center justify-between">
-            <span>Currently Mapped Role Pipeline</span>
-            <button
-              onClick={() => setActiveTab('roles')}
-              className="text-[11px] text-indigo-400 hover:text-indigo-300 underline"
-            >
-              Swap Roles or Models
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-            <div className="p-2.5 bg-slate-900 rounded border border-slate-800 space-y-1">
-              <div className="text-[10px] text-slate-500 font-mono">1. Designer Role</div>
-              <div className="font-bold text-white">{designerAgent?.name || 'StitchCrafter-UI'}</div>
-              <div className="text-[10px] text-indigo-300 font-mono">Stitch Design 2.5 Pro</div>
-            </div>
-
-            <div className="p-2.5 bg-slate-900 rounded border border-slate-800 space-y-1">
-              <div className="text-[10px] text-slate-500 font-mono">2. Developer Role</div>
-              <div className="font-bold text-white">{developerAgent?.name || 'CodeForge-TS'}</div>
-              <div className="text-[10px] text-indigo-300 font-mono">Gemini 2.5 Flash</div>
-            </div>
-
-            <div className="p-2.5 bg-slate-900 rounded border border-slate-800 space-y-1">
-              <div className="text-[10px] text-slate-500 font-mono">3. Q/C Auditor Role</div>
-              <div className="font-bold text-emerald-400">{qcAgent?.name || 'Veritas-QC'}</div>
-              <div className="text-[10px] text-indigo-300 font-mono">DeepSeek R1 Reasoning</div>
-            </div>
-
-            <div className="p-2.5 bg-slate-900 rounded border border-slate-800 space-y-1">
-              <div className="text-[10px] text-slate-500 font-mono">4. Document Control</div>
-              <div className="font-bold text-indigo-300">{docAgent?.name || 'DocuGuard-DC'}</div>
-              <div className="text-[10px] text-indigo-300 font-mono">Release Dossier Signoff</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Submit Execution Button */}
         <button
           onClick={handleRun}
-          disabled={isOrchestrating || !briefPrompt.trim()}
-          className="w-full py-3 px-4 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 rounded-xl shadow-lg transition flex items-center justify-center gap-2 cursor-pointer"
+          disabled={isOrchestrating}
+          className="w-full py-3 rounded-xl bg-[#ea580c] hover:bg-orange-700 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
         >
-          {isOrchestrating ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin text-white" />
-              <span>Executing Team Role Pipeline...</span>
-            </>
-          ) : (
-            <>
-              <Play className="w-4 h-4 fill-current" />
-              <span>Run Team Role Orchestration</span>
-            </>
-          )}
+          <span className="material-symbols-outlined text-[18px]">play_arrow</span>
+          <span>{isOrchestrating ? 'Synthesizing Engineering Pipeline...' : 'Execute Live Orchestration / تشغيل البناء اللحظي'}</span>
         </button>
       </div>
 
-      {/* Realtime Execution Logs */}
+      {/* Live Logs Stream */}
       {orchestrationLogs.length > 0 && (
-        <div className="p-6 bg-slate-950 rounded-xl border border-slate-800 space-y-4">
-          <h3 className="text-sm font-bold text-white font-display flex items-center gap-2">
-            <Terminal className="w-4 h-4 text-indigo-400" />
-            <span>Execution Terminal Logs</span>
-          </h3>
+        <div className="bg-[#1c212c] rounded-2xl border border-stone-800 p-6 shadow-xl text-stone-100 font-mono text-xs space-y-3">
+          <div className="flex items-center justify-between border-b border-stone-800 pb-3 text-[#ea580c]">
+            <span className="font-bold flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+              Live Pipeline Execution Stream
+            </span>
+            <span className="text-[10px] text-stone-400">Target SLA: Realtime Stream</span>
+          </div>
 
-          <div className="space-y-3">
+          <div className="space-y-2 max-h-80 overflow-y-auto pr-2">
             {orchestrationLogs.map((log, idx) => (
-              <div key={idx} className="p-3 bg-slate-900 rounded-lg border border-slate-800 space-y-1 text-xs">
-                <div className="flex items-center justify-between font-mono">
-                  <span className="font-bold text-white flex items-center gap-2">
-                    {log.status === 'completed' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
-                    {log.status === 'running' && <Loader2 className="w-3.5 h-3.5 text-indigo-400 animate-spin" />}
-                    <span>{log.roleTitle} ({log.agentName})</span>
-                  </span>
-
-                  <span className="text-slate-400">{log.modelName}</span>
+              <div key={idx} className="p-2.5 bg-stone-900/80 rounded-xl border border-stone-800 flex items-start gap-3">
+                <span className="text-[#ea580c] font-bold shrink-0">[{log.roleTitle}]</span>
+                <div className="flex-1">
+                  <p className="text-stone-200">{log.outputSummary}</p>
+                  <div className="text-[10px] text-stone-400 mt-0.5">
+                    Agent: {log.agentName} | Model: {log.modelName} | Duration: {log.durationMs}ms
+                  </div>
                 </div>
-                <p className="text-slate-300 font-sans text-xs">{log.outputSummary}</p>
               </div>
             ))}
           </div>
