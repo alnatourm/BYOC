@@ -13,6 +13,9 @@ interface BYOKContextType {
   activeTab: 'dashboard' | 'roles' | 'agents' | 'models' | 'providers' | 'studio' | 'build' | 'admin';
   setActiveTab: (tab: 'dashboard' | 'roles' | 'agents' | 'models' | 'providers' | 'studio' | 'build' | 'admin') => void;
   
+  currentGateStep: 'gate1' | 'gate2' | 'gate3' | 'gate4' | 'gate5' | 'completed';
+  setCurrentGateStep: (gate: 'gate1' | 'gate2' | 'gate3' | 'gate4' | 'gate5' | 'completed') => void;
+  
   operatingMode: 'byok' | 'managed_factory';
   setOperatingMode: (mode: 'byok' | 'managed_factory') => void;
   
@@ -106,6 +109,7 @@ export const BYOKProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [activeTab, setActiveTab] = useState<'dashboard' | 'roles' | 'agents' | 'models' | 'providers' | 'studio' | 'build' | 'admin'>('dashboard');
+  const [currentGateStep, setCurrentGateStep] = useState<'gate1' | 'gate2' | 'gate3' | 'gate4' | 'gate5' | 'completed'>('gate1');
   const [operatingMode, setOperatingMode] = useState<'byok' | 'managed_factory'>('managed_factory');
 
   // SaaS Admin State
@@ -358,17 +362,21 @@ export const BYOKProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsOrchestrating(true);
     setOrchestrationLogs([]);
 
-    const designerRole = roles.find((r) => r.category === 'design' || r.roleTitle === 'Designer') || roles[0];
-    const developerRole = roles.find((r) => r.category === 'dev' || r.roleTitle === 'Developer') || roles[1] || roles[0];
-    const qcRole = roles.find((r) => r.category === 'qc' || r.roleTitle === 'Q/C') || roles[2] || roles[0];
+    const specRole = roles.find((r) => r.id === 'role-01-spec' || r.category === 'product') || roles[0];
+    const designerRole = roles.find((r) => r.id === 'role-02-designer' || r.category === 'design') || roles[1] || roles[0];
+    const developerRole = roles.find((r) => r.id === 'role-03-developer' || r.category === 'dev') || roles[2] || roles[0];
+    const qcRole = roles.find((r) => r.id === 'role-04-qc' || r.category === 'qc') || roles[3] || roles[0];
 
-    const designerAgent = agents.find((a) => a.id === designerRole?.assignedAgentId) || agents[0];
+    const specAgent = agents.find((a) => a.id === specRole?.assignedAgentId) || agents[0];
+    const specModel = models.find((m) => m.id === specRole?.assignedModelId) || models[0];
+
+    const designerAgent = agents.find((a) => a.id === designerRole?.assignedAgentId) || agents[1] || agents[0];
     const designerModel = models.find((m) => m.id === designerRole?.assignedModelId) || models[0];
 
-    const developerAgent = agents.find((a) => a.id === developerRole?.assignedAgentId) || agents[1] || agents[0];
+    const developerAgent = agents.find((a) => a.id === developerRole?.assignedAgentId) || agents[2] || agents[0];
     const developerModel = models.find((m) => m.id === developerRole?.assignedModelId) || models[0];
 
-    const qcAgent = agents.find((a) => a.id === qcRole?.assignedAgentId) || agents[2] || agents[0];
+    const qcAgent = agents.find((a) => a.id === qcRole?.assignedAgentId) || agents[3] || agents[0];
     const qcModel = models.find((m) => m.id === qcRole?.assignedModelId) || models[0];
 
     let designSpecResult: any = null;
@@ -377,16 +385,15 @@ export const BYOKProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const startTime = Date.now();
 
-    // Step 1: Run Designer Role
-    setOrchestrationLogs((prev) => [
-      ...prev,
+    // Stage 1: Product & Spec Agent (RUNS FIRST!)
+    setOrchestrationLogs([
       {
         step: 'designer',
-        roleTitle: designerRole?.roleTitle || 'Designer',
-        agentName: designerAgent.name,
-        modelName: designerModel.name,
+        roleTitle: specRole?.roleTitle || '01. Product & Spec',
+        agentName: specAgent.name,
+        modelName: specModel.name,
         status: 'running',
-        outputSummary: 'Formulating component hierarchy, spatial math, and color design system...',
+        outputSummary: '🎯 01. Product & Spec Agent is drafting PRD, user story epics, and PostgreSQL data model...',
         durationMs: 0,
       },
     ]);
@@ -398,9 +405,9 @@ export const BYOKProvider: React.FC<{ children: React.ReactNode }> = ({ children
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           roleCategory: 'design',
-          roleTitle: designerRole?.roleTitle,
-          agentDirectives: designerAgent.directives,
-          modelIdentifier: designerModel.modelIdentifier,
+          roleTitle: specRole?.roleTitle,
+          agentDirectives: specAgent.directives,
+          modelIdentifier: specModel.modelIdentifier,
           promptBrief: briefPrompt,
         }),
       });
@@ -408,19 +415,18 @@ export const BYOKProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const step1Duration = Date.now() - step1Start;
 
       try {
-        // Parse JSON if returned in markdown code block
         const cleanJsonText = data.outputText.replace(/```json/g, '').replace(/```/g, '').trim();
         designSpecResult = JSON.parse(cleanJsonText);
       } catch {
         designSpecResult = {
           colorPalette: [
-            { name: 'Dark Void Canvas', hex: '#020617' },
-            { name: 'Slate Surface', hex: '#0F172A' },
-            { name: 'Indigo Accent', hex: '#6366F1' },
+            { name: 'Warm Terracotta', hex: '#ea580c' },
+            { name: 'Cream Surface', hex: '#fff8f5' },
+            { name: 'Dark Slate', hex: '#1c212c' },
           ],
           typographyHeading: 'Cabinet Grotesk',
           typographyBody: 'Plus Jakarta Sans',
-          layoutStructure: 'Header + Key Metrics + Interactive Workspace Frame',
+          layoutStructure: 'Header + PRD Spec + Interactive Application Frame',
           componentHierarchy: ['HeaderBar', 'MetricsRow', 'InteractiveBoard'],
         };
       }
@@ -431,7 +437,7 @@ export const BYOKProvider: React.FC<{ children: React.ReactNode }> = ({ children
             ? {
                 ...l,
                 status: 'completed',
-                outputSummary: `Design Spec Created: ${designSpecResult?.layoutStructure || 'Component hierarchy built'}`,
+                outputSummary: `🎯 01. Product & Spec Approved: PRD, user stories & PostgreSQL data model created!`,
                 durationMs: step1Duration,
               }
             : l
@@ -617,6 +623,8 @@ export const BYOKProvider: React.FC<{ children: React.ReactNode }> = ({ children
         saasPlans,
         activeTab,
         setActiveTab,
+        currentGateStep,
+        setCurrentGateStep,
         operatingMode,
         setOperatingMode,
         selectedArtifact,

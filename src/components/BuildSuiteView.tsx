@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import { useBYOK } from '../context/BYOKContext';
 
 export const BuildSuiteView: React.FC = () => {
-  const { setActiveTab, setSelectedArtifact, artifacts, runTeamOrchestration } = useBYOK();
+  const { setActiveTab, setSelectedArtifact, artifacts, runTeamOrchestration, setCurrentGateStep } = useBYOK();
   const [promptText, setPromptText] = useState('');
   const [deliveryMode, setDeliveryMode] = useState<'for-me' | 'with-ai'>('for-me');
   const [isLaunching, setIsLaunching] = useState(false);
   const [launchStepIndex, setLaunchStepIndex] = useState(0);
   const [showLinkModal, setShowLinkModal] = useState(false);
+  const [showApprovalModal, setShowApprovalModal] = useState(false);
+  const [createdArtifact, setCreatedArtifact] = useState<any>(null);
   const [linkInput, setLinkInput] = useState('');
   const [attachments, setAttachments] = useState<Array<{ name: string; type: string }>>([]);
 
@@ -60,13 +62,12 @@ export const BuildSuiteView: React.FC = () => {
         'SaaS Custom'
       );
       setIsLaunching(false);
-      if (created) {
-        setSelectedArtifact(created);
-      } else {
-        setSelectedArtifact(artifacts[0]);
-      }
-      setActiveTab('dashboard');
-    }, 4500);
+      const art = created || artifacts[0];
+      setCreatedArtifact(art);
+      setSelectedArtifact(art);
+      setCurrentGateStep('gate1');
+      setActiveTab('roles');
+    }, 4000);
   };
 
   return (
@@ -659,6 +660,84 @@ export const BuildSuiteView: React.FC = () => {
             <div className="text-xs text-orange-700 bg-orange-50 px-3 py-1 rounded-full border border-orange-200 flex items-center gap-1.5 font-bold mt-1">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
               Target SLA: 03m:45s remaining to first preview
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Human Approval Gate 1 Modal: Product & Spec Agent Output Signoff */}
+      {showApprovalModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 md:p-8 max-w-2xl w-full border border-stone-200 shadow-2xl space-y-5 animate-in zoom-in-95">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-stone-200 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-[#ea580c] flex items-center justify-center text-white font-black text-lg shadow-sm">
+                  01
+                </div>
+                <div>
+                  <div className="text-[11px] font-mono text-[#ea580c] font-bold tracking-wider">HUMAN APPROVAL GATE 1</div>
+                  <h3 className="font-display font-extrabold text-xl text-[#1c212c]">01. Product & Spec Agent Output</h3>
+                </div>
+              </div>
+              <span className="px-3 py-1 bg-amber-50 text-amber-800 rounded-full border border-amber-200 font-bold text-xs flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
+                Awaiting Your Signoff / بانتظار موافقتك
+              </span>
+            </div>
+
+            {/* Spec List Box */}
+            <div className="space-y-3 bg-[#f9f8f6] p-5 rounded-2xl border border-stone-200 text-xs font-sans">
+              <div className="font-bold text-[#1c212c] text-sm flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[#ea580c]">assignment</span>
+                  <span>Agent 01 Created Requirements & Data Model List:</span>
+                </span>
+                <span className="text-[10px] text-emerald-800 bg-emerald-100 font-mono font-bold px-2 py-0.5 rounded">
+                  98.2% Spec Match
+                </span>
+              </div>
+              
+              <ul className="space-y-2.5 text-[#576071] pt-1">
+                <li className="flex items-start gap-2.5">
+                  <span className="material-symbols-outlined text-[18px] text-emerald-600 shrink-0">check_circle</span>
+                  <span><strong>Product Name & Scope:</strong> {createdArtifact?.title || promptText.substring(0, 40) || 'Custom SaaS Platform'}</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <span className="material-symbols-outlined text-[18px] text-emerald-600 shrink-0">check_circle</span>
+                  <span><strong>Epics & Features:</strong> Interactive Booking Calendar, WhatsApp Reminders, Staff Scheduling & Payment Gateway Integration.</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <span className="material-symbols-outlined text-[18px] text-emerald-600 shrink-0">check_circle</span>
+                  <span><strong>PostgreSQL Data Model:</strong> Initialized schema with 5 primary tables (<code>users</code>, <code>appointments</code>, <code>services</code>, <code>staff</code>, <code>audit_logs</code>).</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <span className="material-symbols-outlined text-[18px] text-emerald-600 shrink-0">check_circle</span>
+                  <span><strong>Bilingual UI Support:</strong> Full Arabic (RTL) and English (LTR) language translation keys pre-allocated.</span>
+                </li>
+              </ul>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-2">
+              <button
+                onClick={() => {
+                  setShowApprovalModal(false);
+                  setActiveTab('dashboard');
+                }}
+                className="w-full sm:w-auto px-5 py-3 rounded-xl border border-stone-300 text-stone-700 hover:bg-stone-100 font-bold text-xs transition cursor-pointer"
+              >
+                ✏️ Request Spec Edits / تعديل المواصفات
+              </button>
+
+              <button
+                onClick={() => {
+                  setShowApprovalModal(false);
+                  setActiveTab('roles');
+                }}
+                className="w-full sm:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-[#ea580c] to-amber-500 hover:from-orange-700 hover:to-amber-600 text-white font-extrabold text-xs shadow-md transition cursor-pointer flex items-center justify-center gap-2"
+              >
+                <span>✅ Approve Requirements & Start Google Stitch Design →</span>
+              </button>
             </div>
           </div>
         </div>

@@ -43,7 +43,6 @@ function MainLayout() {
       </div>
 
       {/* Global Modals */}
-      <ArtifactInspectorModal />
       <CreateProjectModal />
       <AddProviderModal />
       <AddModelModal />

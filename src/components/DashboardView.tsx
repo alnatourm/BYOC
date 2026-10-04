@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useBYOK } from '../context/BYOKContext';
 
 export const DashboardView: React.FC = () => {
-  const { artifacts, setSelectedArtifact, setActiveTab } = useBYOK();
+  const { artifacts, setSelectedArtifact, setActiveTab, setCurrentGateStep } = useBYOK();
   const [appIdeaInput, setAppIdeaInput] = useState('');
 
   const fillIdea = (text: string) => {
@@ -370,14 +370,22 @@ export const DashboardView: React.FC = () => {
             <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setSelectedArtifact(docVaultArtifact)}
+                  onClick={() => {
+                    setSelectedArtifact(docVaultArtifact);
+                    setCurrentGateStep('gate1');
+                    setActiveTab('roles');
+                  }}
                   className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-white hover:bg-[#f1eee9] border border-[#e2ded8]/60 text-[#1e2229] font-medium text-xs transition-all shadow-sm cursor-pointer"
                 >
                   <span className="material-symbols-outlined text-[18px] text-[#5f6672]">chat_bubble</span>
                   <span>Request Tweaks • اطلب تعديلاً</span>
                 </button>
                 <button
-                  onClick={() => setSelectedArtifact(docVaultArtifact)}
+                  onClick={() => {
+                    setSelectedArtifact(docVaultArtifact);
+                    setCurrentGateStep('gate1');
+                    setActiveTab('roles');
+                  }}
                   className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-white hover:bg-[#f1eee9] border border-[#e2ded8]/60 text-[#1e2229] font-medium text-xs transition-all shadow-sm cursor-pointer"
                 >
                   <span className="material-symbols-outlined text-[18px] text-[#5f6672]">share</span>
@@ -386,7 +394,11 @@ export const DashboardView: React.FC = () => {
               </div>
 
               <button
-                onClick={() => setSelectedArtifact(docVaultArtifact)}
+                onClick={() => {
+                  setSelectedArtifact(docVaultArtifact);
+                  setCurrentGateStep('gate1');
+                  setActiveTab('roles');
+                }}
                 className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-[#ea580c] text-white hover:bg-orange-700 font-semibold text-xs shadow-md hover:shadow-lg transition-all cursor-pointer"
               >
                 <span className="material-symbols-outlined text-[18px]">visibility</span>
