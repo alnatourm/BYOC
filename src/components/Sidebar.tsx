@@ -1,6 +1,13 @@
 import React from 'react';
 import { useBYOK } from '../context/BYOKContext';
 
+interface SidebarProps {
+  isSuperAdmin?: boolean;
+  onLogout?: () => void;
+  lang?: 'en' | 'ar';
+  setLang?: (l: 'en' | 'ar') => void;
+}
+
 interface NavItem {
   id: 'dashboard' | 'roles' | 'build' | 'agents' | 'providers' | 'models' | 'studio' | 'admin';
   icon: string;
@@ -11,7 +18,7 @@ interface NavItem {
   subItems?: Array<{ id: 'agents' | 'providers' | 'studio'; label: string; dotColor: string }>;
 }
 
-export const Sidebar: React.FC = () => {
+export const Sidebar: React.FC<SidebarProps> = ({ isSuperAdmin, onLogout, lang, setLang }) => {
   const { activeTab, setActiveTab } = useBYOK();
 
   const navItems: NavItem[] = [
@@ -31,28 +38,29 @@ export const Sidebar: React.FC = () => {
     },
     { id: 'providers', icon: 'pie_chart', titleEn: 'Usage & Billing', titleAr: 'الفوترة' },
     { id: 'models', icon: 'settings', titleEn: 'Settings', titleAr: 'الإعدادات' },
-    { id: 'admin', icon: 'admin_panel_settings', titleEn: 'Super Admin', titleAr: 'لوحة المشرف 🔑', isAdmin: true },
   ];
+
+  if (isSuperAdmin) {
+    navItems.push({ id: 'admin', icon: 'admin_panel_settings', titleEn: 'Super Admin', titleAr: 'لوحة المشرف 🔑', isAdmin: true });
+  }
 
   return (
     <aside className="fixed left-0 top-0 h-full w-72 bg-[#fcfbf9] z-50 flex flex-col justify-between p-6 border-r border-[#e2ded8]/60 shadow-[0_1px_12px_rgba(0,0,0,0.03)] font-sans">
       <div className="flex flex-col gap-6 overflow-y-auto">
-        {/* Brand Header */}
         <a 
           href="#dashboard"
           onClick={(e) => { e.preventDefault(); setActiveTab('dashboard'); }}
           className="flex items-center gap-3 px-1 group"
         >
-          <div className="w-10 h-10 rounded-xl bg-[#ea580c] flex items-center justify-center shadow-[0_4px_12px_rgba(234,88,12,0.28)] text-white">
-            <span className="material-symbols-outlined text-[22px]">factory</span>
+          <div className="w-10 h-10 rounded-xl bg-[#ea580c] flex items-center justify-center shadow-[0_4px_12px_rgba(234,88,12,0.28)] text-white font-bold text-lg">
+            BY
           </div>
           <div className="flex flex-col">
-            <span className="font-semibold text-lg text-[#1e2229] leading-none font-display">OGroup Studio</span>
-            <span className="text-xs text-[#ea580c] font-bold tracking-wide mt-1">AI Software Factory</span>
+            <span className="font-semibold text-lg text-[#1e2229] leading-none font-display">BYOC Platform</span>
+            <span className="text-xs text-[#ea580c] font-bold tracking-wide mt-1">AI Governed Factory</span>
           </div>
         </a>
 
-        {/* Navigation Links */}
         <nav className="flex flex-col gap-1.5">
           {navItems.map((item) => {
             const isActive = activeTab === item.id;
@@ -120,7 +128,6 @@ export const Sidebar: React.FC = () => {
                   <span className="text-[11px] text-[#948f88] font-sans">{item.titleAr}</span>
                 </button>
 
-                {/* Sub items for My Factory */}
                 {item.subItems && (
                   <div className="pl-8 flex flex-col gap-1 pt-0.5">
                     {item.subItems.map((sub) => (
@@ -143,21 +150,26 @@ export const Sidebar: React.FC = () => {
         </nav>
       </div>
 
-      {/* Bottom Friendly Assistance Card */}
-      <div className="bg-white p-4 rounded-xl border border-[#e2ded8]/60 shadow-[0_2px_8px_rgba(0,0,0,0.03)] flex flex-col gap-1.5 mt-2">
-        <div className="flex items-center gap-1.5 text-[#ea580c] font-semibold text-xs">
-          <span className="material-symbols-outlined text-[16px]">volunteer_activism</span>
-          <span>Friendly Assistance</span>
+      <div className="bg-white p-4 rounded-xl border border-[#e2ded8]/60 shadow-[0_2px_8px_rgba(0,0,0,0.03)] flex flex-col gap-2 mt-2">
+        <div className="flex items-center justify-between text-xs">
+          <span className="font-bold text-slate-800">Account</span>
+          {setLang && (
+            <button
+              onClick={() => setLang(lang === 'en' ? 'ar' : 'en')}
+              className="text-[11px] px-2 py-0.5 rounded bg-slate-100 font-semibold text-amber-600 cursor-pointer"
+            >
+              {lang === 'en' ? 'العربية' : 'English'}
+            </button>
+          )}
         </div>
-        <p className="text-xs text-[#5f6672] leading-relaxed">
-          Need a warm human touch? Our founders community is live.
-        </p>
-        <button 
-          onClick={() => setActiveTab('build')}
-          className="text-[#ea580c] hover:text-[#f97316] font-bold text-xs transition-colors mt-1 inline-block text-left cursor-pointer"
-        >
-          Get Help • المساعدة →
-        </button>
+        {onLogout && (
+          <button
+            onClick={onLogout}
+            className="w-full py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs transition cursor-pointer"
+          >
+            Sign Out • خروج
+          </button>
+        )}
       </div>
     </aside>
   );

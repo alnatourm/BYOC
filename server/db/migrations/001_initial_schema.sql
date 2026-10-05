@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS tenants (
   name VARCHAR(256) NOT NULL,
   plan_id VARCHAR(64) REFERENCES plans(id),
   status VARCHAR(32) DEFAULT 'active',
+  separation_of_duties BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

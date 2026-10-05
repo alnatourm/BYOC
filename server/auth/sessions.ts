@@ -42,4 +42,4 @@ export async function revokeAllUserSessions(userId: string): Promise<void> {
   );
 }
 
-export const SESSION_COOKIE_NAME = env.NODE_ENV === 'production' ? '__Host-sid' : 'sid';
+export const SESSION_COOKIE_NAME = 'byoc_sid';

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import crypto from 'node:crypto';
 import { requireAuth, requireTenantRole, AuthRequest } from '../middleware/auth';
 import { TenantRepository } from '../db/repository';
-import { encryptTenantSecret, computeFingerprint } from '../vault/crypto';
+import { encryptTenantSecret, decryptTenantSecret, computeFingerprint } from '../vault/crypto';
 import { verifyHostingToken, generateSshKeyPair, HOSTING_CAPABILITIES_MATRIX } from '../hosting/capabilities';
 import { logAuditEvent } from '../audit/chain';
 import { db } from '../db';
@@ -16,9 +16,46 @@ const createHostingSchema = z.object({
   secret: z.string().min(1, 'Token or SSH host is required'),
 });
 
+const planDeploymentSchema = z.object({
+  runId: z.string().min(1),
+  hostingConnectionId: z.string().min(1),
+  topology: z.string().optional(),
+});
+
+// GET /v1/quotes (Authenticated Tenant Users)
+hostingRouter.get(
+  '/quotes',
+  requireAuth,
+  async (req: AuthRequest, res) => {
+    try {
+      const { rows } = await db.query('SELECT * FROM price_quotes ORDER BY quoted_at DESC');
+      const now = new Date();
+      const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+
+      const quotesWithStale = rows.map((q) => {
+        const ageMs = now.getTime() - new Date(q.quoted_at).getTime();
+        return {
+          id: q.id,
+          provider: q.provider,
+          planLabel: q.plan_label,
+          amountUsd: parseFloat(q.amount_usd),
+          currency: q.currency,
+          sourceUrl: q.source_url,
+          quotedAt: q.quoted_at,
+          stale: ageMs > thirtyDaysMs,
+        };
+      });
+
+      res.json({ quotes: quotesWithStale });
+    } catch {
+      res.status(500).json({ error: 'GENERIC_SERVER_ERROR' });
+    }
+  }
+);
+
 // GET /v1/hosting-connections
 hostingRouter.get(
-  '/',
+  '/hosting-connections',
   requireAuth,
   requireTenantRole('owner', 'admin', 'viewer'),
   async (req: AuthRequest, res) => {
@@ -38,139 +75,167 @@ hostingRouter.get(
       }));
 
       res.json({ hostingConnections: sanitized });
-    } catch (err: any) {
-      res.status(500).json({ error: 'Failed to list hosting connections.' });
+    } catch {
+      res.status(500).json({ error: 'GENERIC_SERVER_ERROR' });
     }
   }
 );
 
 // POST /v1/hosting-connections
 hostingRouter.post(
-  '/',
+  '/hosting-connections',
   requireAuth,
   requireTenantRole('owner', 'admin'),
   async (req: AuthRequest, res) => {
     try {
       const { type, label, secret } = createHostingSchema.parse(req.body);
-      const tenantId = req.membership!.tenantId;
-      const connectionId = `host_${crypto.randomBytes(12).toString('hex')}`;
-      const fingerprint = computeFingerprint(secret);
-      const last4 = secret.slice(-4) || '••••';
 
-      let metaJson = '{}';
-      if (type === 'ssh_server') {
-        const keypair = generateSshKeyPair();
-        metaJson = JSON.stringify({ publicKey: keypair.publicKey, setupScript: keypair.setupScript });
+      // Check User Email Verification
+      const { rows: userRows } = await db.query('SELECT email_verified_at FROM users WHERE id = $1', [req.user!.id]);
+      if (!userRows[0]?.email_verified_at) {
+        return res.status(403).json({ error: 'EMAIL_UNVERIFIED: Email verification required to configure hosting connections.' });
       }
 
-      const encrypted = await encryptTenantSecret(tenantId, connectionId, secret, 1);
+      const connectionId = `host_conn_${crypto.randomBytes(12).toString('hex')}`;
+      const fingerprint = computeFingerprint(secret);
+      const last4 = secret.slice(-4) || '****';
 
-      const repo = new TenantRepository(tenantId);
-      const created = await repo.insert('hosting_connections', {
-        id: connectionId,
-        type,
-        label,
-        ciphertext: encrypted.ciphertext,
-        iv: encrypted.iv,
-        tag: encrypted.tag,
-        key_version: 1,
-        fingerprint,
-        last4,
-        meta_json: metaJson,
-        status: 'unverified',
-      });
+      // Perform Live Real Verification Call
+      const verification = await verifyHostingToken(type, secret);
 
-      await logAuditEvent(tenantId, req.user!.id, 'hosting_connection_add', 'hosting_connection', {
-        connectionId,
-        type,
-        label,
-      });
+      const encrypted = await encryptTenantSecret(req.membership!.tenantId, connectionId, secret, 1);
+
+      await db.query(
+        `INSERT INTO hosting_connections (id, tenant_id, type, label, ciphertext, iv, tag, key_version, fingerprint, last4, status, last_verified_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+        [
+          connectionId,
+          req.membership!.tenantId,
+          type,
+          label,
+          encrypted.ciphertext,
+          encrypted.iv,
+          encrypted.tag,
+          1,
+          fingerprint,
+          last4,
+          verification.verified ? 'verified' : 'unverified',
+          verification.verified ? new Date() : null,
+        ]
+      );
+
+      await logAuditEvent(
+        req.membership!.tenantId,
+        req.user!.id,
+        'hosting.connection_created',
+        `hosting:${connectionId}`,
+        { type, label, verified: verification.verified }
+      );
 
       res.status(201).json({
-        success: true,
         connection: {
-          id: created.id,
-          type: created.type,
-          label: created.label,
-          fingerprint: created.fingerprint,
-          last4: created.last4,
-          status: created.status,
-          capabilities: HOSTING_CAPABILITIES_MATRIX[type],
-          meta: JSON.parse(metaJson),
+          id: connectionId,
+          type,
+          label,
+          fingerprint,
+          last4,
+          status: verification.verified ? 'verified' : 'unverified',
+          lastVerifiedAt: verification.verified ? new Date().toISOString() : null,
+          capabilities: HOSTING_CAPABILITIES_MATRIX[type] || null,
         },
+        sshInfo: type === 'ssh_server' ? generateSshKeyPair() : undefined,
       });
     } catch (err: any) {
       if (err instanceof z.ZodError) {
-        return res.status(400).json({ error: err.issues[0].message });
+        return res.status(400).json({ error: 'INVALID_INPUT: ' + err.issues.map((e: any) => e.message).join(', ') });
       }
-      res.status(500).json({ error: 'Failed to add hosting connection.' });
+      res.status(500).json({ error: 'GENERIC_SERVER_ERROR' });
     }
   }
 );
 
 // POST /v1/hosting-connections/:id/verify
 hostingRouter.post(
-  '/:id/verify',
+  '/hosting-connections/:id/verify',
   requireAuth,
   requireTenantRole('owner', 'admin'),
   async (req: AuthRequest, res) => {
     try {
-      const tenantId = req.membership!.tenantId;
-      const repo = new TenantRepository(tenantId);
+      const repo = new TenantRepository(req.membership!.tenantId);
       const conn = await repo.findOne('hosting_connections', { id: req.params.id });
 
       if (!conn) {
         return res.status(404).json({ error: 'NOT_FOUND: Hosting connection not found.' });
       }
 
-      const result = await verifyHostingToken(conn.type, 'secret_token_placeholder');
-      const newStatus = result.verified ? 'verified' : 'failed';
-
-      await db.query(
-        'UPDATE hosting_connections SET status = $1, last_verified_at = NOW() WHERE id = $2',
-        [newStatus, conn.id]
+      const decryptedSecret = await decryptTenantSecret(
+        req.membership!.tenantId,
+        conn.id,
+        conn.ciphertext,
+        conn.iv,
+        conn.tag,
+        conn.key_version
       );
 
-      await logAuditEvent(tenantId, req.user!.id, 'hosting_connection_verify', 'hosting_connection', {
-        connectionId: conn.id,
-        status: newStatus,
-      });
+      const verification = await verifyHostingToken(conn.type, decryptedSecret);
+
+      const newStatus = verification.verified ? 'verified' : 'unverified';
+      await db.query(
+        'UPDATE hosting_connections SET status = $1, last_verified_at = $2 WHERE id = $3',
+        [newStatus, verification.verified ? new Date() : null, conn.id]
+      );
+
+      await logAuditEvent(
+        req.membership!.tenantId,
+        req.user!.id,
+        'hosting.connection_verified',
+        `hosting:${conn.id}`,
+        { verified: verification.verified, error: verification.error }
+      );
 
       res.json({
-        success: result.verified,
+        id: conn.id,
         status: newStatus,
-        message: result.message,
-        capabilities: HOSTING_CAPABILITIES_MATRIX[conn.type],
+        lastVerifiedAt: verification.verified ? new Date().toISOString() : null,
+        error: verification.error,
       });
-    } catch (err: any) {
-      res.status(500).json({ error: 'Failed to verify hosting connection.' });
+    } catch {
+      res.status(500).json({ error: 'GENERIC_SERVER_ERROR' });
     }
   }
 );
 
-// POST /v1/deployments/plan - Gate 5 Approved Deployment Plan (Phase 1B)
+// POST /v1/deployments/plan
 hostingRouter.post(
   '/deployments/plan',
   requireAuth,
-  requireTenantRole('owner', 'admin', 'reviewer'),
+  requireTenantRole('owner', 'admin', 'requester'),
   async (req: AuthRequest, res) => {
     try {
-      const { runId, hostingConnectionId, topology, backupPlan, spendLimitPlan } = req.body;
-      const repo = new TenantRepository(req.membership!.tenantId);
+      const { runId, hostingConnectionId, topology } = planDeploymentSchema.parse(req.body);
 
-      const hostingConn = await repo.findOne('hosting_connections', { id: hostingConnectionId });
-      if (!hostingConn) {
-        return res.status(404).json({ error: 'NOT_FOUND: Hosting connection not found.' });
+      const { rows: runRows } = await db.query(
+        'SELECT id FROM runs WHERE id = $1 AND tenant_id = $2',
+        [runId, req.membership!.tenantId]
+      );
+      if (runRows.length === 0) {
+        return res.status(404).json({ error: 'NOT_FOUND: Run not found or cross-tenant access denied.' });
+      }
+
+      const { rows: hostRows } = await db.query(
+        'SELECT * FROM hosting_connections WHERE id = $1 AND tenant_id = $2 AND status = $3',
+        [hostingConnectionId, req.membership!.tenantId, 'verified']
+      );
+      if (hostRows.length === 0) {
+        return res.status(400).json({ error: 'HOSTING_UNVERIFIED: Selected hosting connection is not verified.' });
       }
 
       const deploymentId = `dep_${crypto.randomBytes(12).toString('hex')}`;
       const planJson = JSON.stringify({
-        targetProvider: hostingConn.type,
-        label: hostingConn.label,
-        topology: topology || 'API Service + PostgreSQL + Frontend Static',
-        backupPlan: backupPlan || 'Verified offsite database dump',
-        spendLimitPlan: spendLimitPlan || 'Workspace hard spend limit',
-        phaseNotice: 'Plan only. Real deployment arrives in Phase 2.',
+        runId,
+        hostingConnectionId,
+        topology: topology || 'API Service + Database + Frontend',
+        plannedAt: new Date().toISOString(),
       });
 
       await db.query(
@@ -179,21 +244,25 @@ hostingRouter.post(
         [deploymentId, runId, hostingConnectionId, planJson, 'planned', req.user!.id]
       );
 
-      await logAuditEvent(req.membership!.tenantId, req.user!.id, 'deployment_plan_approved', 'deployment', {
-        deploymentId,
-        runId,
-        hostingConnectionId,
-      });
+      await logAuditEvent(
+        req.membership!.tenantId,
+        req.user!.id,
+        'hosting.deployment_plan_created',
+        `deployment:${deploymentId}`,
+        { runId, hostingConnectionId }
+      );
 
       res.status(201).json({
-        success: true,
-        deploymentId,
+        id: deploymentId,
+        runId,
         status: 'planned',
         notice: 'Plan only. Real deployment arrives in Phase 2.',
-        plan: JSON.parse(planJson),
       });
     } catch (err: any) {
-      res.status(500).json({ error: 'Failed to create deployment plan.' });
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ error: 'INVALID_INPUT: ' + err.issues.map((e: any) => e.message).join(', ') });
+      }
+      res.status(500).json({ error: 'GENERIC_SERVER_ERROR' });
     }
   }
 );

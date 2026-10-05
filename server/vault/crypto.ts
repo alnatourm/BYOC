@@ -6,15 +6,18 @@ const ALGORITHM = 'aes-256-gcm';
 
 function getMasterKeyBuffer(): Buffer {
   const masterKey = env.VAULT_MASTER_KEY;
-  if (Buffer.from(masterKey, 'base64').length === 32) {
-    return Buffer.from(masterKey, 'base64');
+  const buf = Buffer.from(masterKey, 'base64');
+  if (buf.length !== 32) {
+    throw new Error('INVALID_MASTER_KEY: VAULT_MASTER_KEY must base64-decode to exactly 32 bytes.');
   }
-  return crypto.createHash('sha256').update(masterKey).digest();
+  return buf;
 }
 
 export function computeFingerprint(secret: string): string {
-  const masterKey = getMasterKeyBuffer();
-  const hmac = crypto.createHmac('sha256', masterKey).update(secret).digest('hex');
+  const masterKeyBuf = getMasterKeyBuffer();
+  // Derive Fingerprint HMAC key from Master Key using HKDF
+  const derivedHmacKey = crypto.hkdfSync('sha256', masterKeyBuf, Buffer.from('byoc_vault_salt_v1'), Buffer.from('fingerprint_hmac_key'), 32);
+  const hmac = crypto.createHmac('sha256', Buffer.from(derivedHmacKey)).update(secret).digest('hex');
   return hmac.slice(0, 12);
 }
 

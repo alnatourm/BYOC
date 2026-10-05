@@ -67,6 +67,9 @@ CREATE TABLE IF NOT EXISTS dispatches (
   error TEXT DEFAULT NULL
 );
 
+-- Enforce one active dispatch per run-stage
+CREATE UNIQUE INDEX IF NOT EXISTS idx_active_dispatch_per_run_stage ON dispatches (stage_run_id) WHERE state IN ('dispatched', 'running');
+
 CREATE TABLE IF NOT EXISTS artifacts (
   id VARCHAR(64) PRIMARY KEY,
   run_id VARCHAR(64) REFERENCES runs(id) ON DELETE CASCADE,

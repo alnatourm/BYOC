@@ -1,21 +1,56 @@
-# Architectural Decision Log (ADR) - Phase 1A Foundations
+# Architectural Decision Records (ADRs) - BYOC Platform
 
-## ADR 001: 5-Role Pipeline Consolidation
-- **Context**: The original 10 agent roles were merged into 5 primary pipeline gates: Product & Spec, Designer, Developer, QC & Security, and Release & Deploy.
-- **Decision**: Keep the 5 core roles as the active gate structure while retaining inner checklists for specialized tasks.
+## ADR 1: Fail-Closed `NODE_ENV` Configuration & Production Refusal
 
-## ADR 002: Key Custody & Master Key Encryption
-- **Context**: Railway PaaS does not provide an external KMS natively.
-- **Decision**: Use AES-256-GCM with a per-tenant Data Encryption Key (DEK) wrapped by `VAULT_MASTER_KEY` (with versioning and rotation support via `npm run rotate-master-key`). Master key can be migrated to AWS KMS / GCP KMS in Phase 2.
+### Context
+Previous configuration defaulted to permissive development settings if `NODE_ENV` was unset or unrecognized, allowing production instances to inadvertently start with hardcoded master keys or unencrypted fallback values.
 
-## ADR 003: Embedded Database Engine for Local/Preview Runtimes
-- **Context**: Development previews might run without a dedicated PostgreSQL server instance.
-- **Decision**: Use `@electric-sql/pglite` (embedded Postgres-compatible engine) when `DATABASE_URL` is omitted, and standard `pg` Pool when `DATABASE_URL` is present.
+### Decision
+Treat any `NODE_ENV` string other than **exactly** `"development"` or `"test"` (including `undefined` or empty string) strictly as **`production`**.
 
-## ADR 004: Write-Only Vault Connections
-- **Context**: Prevent leakage of customer AI keys (Gemini, Anthropic, OpenAI).
-- **Decision**: Provider keys are write-only. After saving, the API returns only `provider`, `label`, `last4`, `fingerprint` (HMAC-SHA256 derived from master key), `status`, and `last_verified_at`. Secrets are never logged or returned in responses.
+When executing in `production` mode:
+- `VAULT_MASTER_KEY` MUST be present and base64-decode to **EXACTLY 32 bytes**.
+- `SESSION_SECRET` MUST be present and at least **32 bytes** long.
+- `APP_URL` MUST be explicitly defined.
+- `ALLOWED_ORIGINS` MUST be explicitly configured (no localhost defaults permitted).
 
-## ADR 005: Hash-Chained Append-Only Audit Trail
-- **Context**: Compliance requirements demand immutable event logs.
-- **Decision**: Every audit event includes a SHA-256 hash calculated as `SHA-256(prev_hash | canonical_json_of_event)`. A database trigger blocks `UPDATE` and `DELETE` on the `audit_events` table.
+If any of these conditions fail, the server immediately logs a `FATAL_CONFIG_ERROR` and exits non-zero (`process.exit(1)`).
+
+---
+
+## ADR 2: Separation of Duties Enforcement for Gate 5 Release Approval
+
+### Context
+Solo founders or small tenant teams need the ability to approve final release deployments themselves, whereas enterprise governance requires strict separation of duties (preventing the creator of a run/dispatch from approving its final Gate 5 deployment).
+
+### Decision
+Add a `separation_of_duties` boolean setting on the `tenants` table (defaulting to `TRUE`).
+- When `separation_of_duties = TRUE`, Gate 5 approval rejects any attempt by the run creator or dispatch starter to approve their own Gate 5 release.
+- Tenant owners can explicitly toggle `separation_of_duties` via `PUT /v1/tenant/settings`.
+- Every change to `separation_of_duties` writes a hash-chained audit event.
+
+---
+
+## ADR 3: Platform Super Admin Verified Price Quotes Engine
+
+### Context
+Gate 5 (Release & Deployment Plan) requires hosting monthly cost estimates. To prevent fabricated or hardcoded cost metrics, prices must originate strictly from platform database records.
+
+### Decision
+- Create `price_quotes` database table starting **EMPTY**.
+- Super Admins manage quotes via `/v1/admin/quotes` (`GET`, `POST`, `DELETE`), specifying `provider`, `plan_label`, `amount_usd`, `currency`, `source_url`, and `quoted_at`.
+- When `price_quotes` contains no entry for a provider, Gate 5 displays **"No quote loaded"**.
+- Quotes older than 30 days are automatically tagged with `stale: true` and flagged with a warning banner.
+
+---
+
+## ADR 4: Railway PaaS Integration & Verification Findings
+
+### Context
+Section 1.4 requires verifying Railway connection tokens against live Railway APIs.
+
+### Findings & Decision
+- **Endpoint**: Railway GraphQL API at `https://backboard.railway.app/graphql`.
+- **Authentication**: Header `Authorization: Bearer <token>`.
+- **Read-Only Verification Query**: `query { me { id email } }`.
+- Verification succeeds if HTTP status is 200 and `data.me.id` is present in the response body.

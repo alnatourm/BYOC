@@ -2,103 +2,98 @@ import React, { useState } from 'react';
 import { useBYOK } from '../../context/BYOKContext';
 
 export const CreateProjectModal: React.FC = () => {
-  const { isCreateProjectOpen, setIsCreateProjectOpen, roles, agents, models, runTeamOrchestration, isOrchestrating, setSelectedArtifact, setActiveTab } = useBYOK();
-
-  const [title, setTitle] = useState('');
-  const [category, setCategory] = useState('SaaS Dashboard');
-  const [prompt, setPrompt] = useState('');
+  const { isCreateProjectOpen, setIsCreateProjectOpen, createProject, createRun, setActiveTab } = useBYOK();
+  const [name, setName] = useState('');
+  const [mode, setMode] = useState<'byok' | 'managed'>('byok');
+  const [intent, setIntent] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   if (!isCreateProjectOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !prompt.trim() || isOrchestrating) return;
-
-    const artifact = await runTeamOrchestration(title, prompt, category);
-    setIsCreateProjectOpen(false);
-    if (artifact) {
-      setSelectedArtifact(artifact);
-      setActiveTab('dashboard');
+    setLoading(true);
+    setError(null);
+    try {
+      const proj = await createProject(name, mode);
+      await createRun(proj.id, `${name} Run 1.0`, intent || `Build ${name}`);
+      setIsCreateProjectOpen(false);
+      setName('');
+      setIntent('');
+      setActiveTab('build');
+    } catch (err: any) {
+      setError(err.message || 'Failed to create project.');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 font-sans text-[#1c212c]">
-      <div className="bg-white rounded-2xl p-6 md:p-8 max-w-lg w-full border border-[#e2d9d2] shadow-2xl relative space-y-5">
-        <div className="flex items-center justify-between border-b border-[#e2d9d2]/60 pb-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center text-[#ea580c]">
-              <span className="material-symbols-outlined text-[24px]">auto_awesome</span>
-            </div>
-            <div>
-              <h3 className="font-display font-bold text-lg text-[#1c212c]">Create New Software / بناء جديد</h3>
-              <p className="text-xs text-[#948374]">OGroup Autonomous AI Factory Pipeline</p>
-            </div>
-          </div>
-
-          <button
-            onClick={() => setIsCreateProjectOpen(false)}
-            className="text-[#948374] hover:text-[#1c212c] transition-colors p-1"
-          >
-            <span className="material-symbols-outlined text-[20px]">close</span>
-          </button>
+    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl p-6 max-w-md w-full border border-stone-200 shadow-2xl space-y-4">
+        <div className="flex items-center justify-between pb-2 border-b border-stone-100">
+          <h3 className="font-bold text-base text-[#1f242e]">Create New Governed Software Project</h3>
+          <button onClick={() => setIsCreateProjectOpen(false)} className="text-stone-400 hover:text-stone-600">✕</button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-[#1c212c]">Software Name / اسم التطبيق</label>
+        {error && (
+          <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+          <div>
+            <label className="block font-bold text-stone-700 mb-1">Project Name</label>
             <input
               type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g., Pet Grooming Appointment App"
               required
-              className="w-full bg-[#f9f8f6] border border-[#e2d9d2]/70 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-[#1c212c] focus:outline-none focus:border-[#ea580c]"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Sameer Saloon Mobile App"
+              className="w-full p-2.5 rounded-lg border border-stone-300 outline-none focus:border-amber-500 text-xs"
             />
           </div>
 
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-[#1c212c]">Category / التصنيف</label>
+          <div>
+            <label className="block font-bold text-stone-700 mb-1">Execution Mode</label>
             <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="w-full bg-[#f9f8f6] border border-[#e2d9d2]/70 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-[#1c212c] focus:outline-none focus:border-[#ea580c] cursor-pointer"
+              value={mode}
+              onChange={(e) => setMode(e.target.value as 'byok' | 'managed')}
+              className="w-full p-2.5 rounded-lg border border-stone-300 outline-none text-xs bg-white"
             >
-              <option value="SaaS Dashboard">SaaS Dashboard / لوحة تحكم</option>
-              <option value="Booking & Appointments">Booking & Appointments / حجز مواعيد</option>
-              <option value="E-Commerce Retail">E-Commerce Retail / متجر إلكتروني</option>
-              <option value="Mobile Touch App">Mobile Touch App / تطبيق جوال</option>
-              <option value="Custom Software">Custom Software / مخصص</option>
+              <option value="byok">BYOK (Bring Your Own Key)</option>
+              <option value="managed">Managed Factory</option>
             </select>
           </div>
 
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-[#1c212c]">Description / الوصف بكلماتك</label>
+          <div>
+            <label className="block font-bold text-stone-700 mb-1">Project Brief / Intent</label>
             <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Describe features, pages, and requirements in Arabic or English..."
               rows={3}
               required
-              className="w-full bg-[#f9f8f6] border border-[#e2d9d2]/70 rounded-xl p-3.5 text-xs font-medium text-[#1c212c] focus:outline-none focus:border-[#ea580c] resize-none"
+              value={intent}
+              onChange={(e) => setIntent(e.target.value)}
+              placeholder="Describe software requirements (e.g. appointment booking app for Sameer Saloon with Gold & White colors)..."
+              className="w-full p-2.5 rounded-lg border border-stone-300 outline-none focus:border-amber-500 text-xs resize-none"
             />
           </div>
 
-          <div className="flex items-center justify-end gap-3 pt-2">
+          <div className="flex justify-end gap-2 pt-2">
             <button
               type="button"
               onClick={() => setIsCreateProjectOpen(false)}
-              className="px-4 py-2.5 rounded-xl bg-[#f5f3ef] hover:bg-[#e8e3dc] text-xs font-bold text-[#1c212c] cursor-pointer"
+              className="px-4 py-2 rounded-xl bg-stone-100 text-stone-700 font-bold"
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={isOrchestrating}
-              className="px-6 py-2.5 rounded-xl bg-[#ea580c] hover:bg-orange-700 text-white font-bold text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer"
+              disabled={loading}
+              className="px-5 py-2 rounded-xl bg-[#d97706] hover:bg-amber-700 text-white font-bold disabled:opacity-50"
             >
-              <span className="material-symbols-outlined text-[18px]">auto_awesome</span>
-              <span>{isOrchestrating ? 'Building App...' : 'Start AI Factory Build / ابدأ البناء'}</span>
+              {loading ? 'Creating...' : 'Initialize Project'}
             </button>
           </div>
         </form>

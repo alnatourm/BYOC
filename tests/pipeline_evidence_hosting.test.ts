@@ -5,6 +5,7 @@ process.env.NODE_ENV = 'test';
 
 import { app } from '../server';
 import { runMigrations } from '../server/db/migrate';
+import { db } from '../server/db';
 import { isTransitionAllowed } from '../server/pipeline/stateMachine';
 import { evaluateDevEvidence } from '../server/evidence';
 
@@ -26,6 +27,9 @@ describe('Phase 1B Governed Pipeline & Hosting Integration Suite', () => {
 
     csrfToken = signupRes.body.csrfToken;
     sessionCookie = signupRes.headers['set-cookie'][0];
+
+    // Verify User Email for Preflight & Hosting Permission
+    await db.query('UPDATE users SET email_verified_at = NOW() WHERE id = $1', [signupRes.body.user.id]);
   });
 
   describe('State Machine Pure Transition Matrix', () => {
@@ -53,6 +57,21 @@ describe('Phase 1B Governed Pipeline & Hosting Integration Suite', () => {
       expect(res.status).toBe(201);
       expect(res.body.project.id).toBeDefined();
       projectId = res.body.project.id;
+
+      // Add & assign provider connection so preflight passes
+      const connRes = await request(app)
+        .post('/v1/connections')
+        .set('Cookie', sessionCookie)
+        .set('x-csrf-token', csrfToken)
+        .send({
+          type: 'gemini',
+          label: 'Gemini Key for Hosting Test',
+          secret: 'AIzaSyExampleGeminiApiKey1234567890',
+        });
+
+      const connId = connRes.body.connection.id;
+      await db.query('UPDATE provider_connections SET status = $1, last_verified_at = NOW() WHERE id = $2', ['active', connId]);
+      await db.query('UPDATE role_slots SET connection_id = $1 WHERE project_id = $2 AND role = $3', [connId, projectId, 'spec']);
     });
 
     it('POST /v1/runs creates run and 5 stage runs + gates', async () => {
@@ -126,6 +145,9 @@ describe('Phase 1B Governed Pipeline & Hosting Integration Suite', () => {
       expect(res.body.connection.fingerprint).toBeDefined();
       expect(res.body.connection.secret).toBeUndefined(); // Write-only key
       hostingId = res.body.connection.id;
+
+      // Mark hosting connection verified for deployment plan test
+      await db.query('UPDATE hosting_connections SET status = $1, last_verified_at = NOW() WHERE id = $2', ['verified', hostingId]);
     });
 
     it('POST /v1/deployments/plan creates planned deployment with Phase 2 notice', async () => {

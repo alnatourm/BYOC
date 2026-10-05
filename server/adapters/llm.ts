@@ -1,6 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
 import { z } from 'zod';
-import { env } from '../config';
 
 // Zod Schemas for Role Outputs
 export const specOutputSchema = z.object({
@@ -27,17 +26,23 @@ export const qcOutputSchema = z.object({
 
 export async function executeLlmRole(
   role: 'spec' | 'design' | 'dev' | 'qc' | 'release',
-  apiKey: string | undefined,
+  apiKey: string,
   promptBrief: string,
   instructionBody: string,
   modelName = 'gemini-2.5-flash'
 ): Promise<{ rawOutput: string; parsedContent?: any; valid: boolean; validationError?: string }> {
-  const effectiveApiKey = apiKey || process.env.GEMINI_API_KEY;
-  if (!effectiveApiKey) {
-    throw new Error('LLM_ADAPTER_ERROR: No API key available for LLM role execution.');
+  if (!apiKey || apiKey.trim().length === 0) {
+    throw new Error('LLM_ADAPTER_ERROR: No API key passed to LLM role adapter.');
   }
 
-  const ai = new GoogleGenAI({});
+  const ai = new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      },
+    },
+  });
 
   const response = await ai.models.generateContent({
     model: modelName,

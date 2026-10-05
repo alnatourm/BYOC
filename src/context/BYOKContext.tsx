@@ -1,29 +1,142 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Provider, Model, Agent, Role, ProjectArtifact, OrchestrationStepLog, SaaSUser, SaaSPlan } from '../types/byok';
-import { INITIAL_PROVIDERS, INITIAL_MODELS, INITIAL_AGENTS, INITIAL_ROLES, INITIAL_ARTIFACTS } from '../data/mockData';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { api } from '../api';
+
+export interface Project {
+  id: string;
+  name: string;
+  mode: 'byok' | 'managed';
+  repoFullName?: string;
+  createdBy?: string;
+  createdAt?: string;
+}
+
+export interface Run {
+  id: string;
+  projectId: string;
+  title: string;
+  intent: string;
+  currentStage: number;
+  status: string;
+  createdAt?: string;
+}
+
+export interface ProviderConnection {
+  id: string;
+  type: string;
+  label: string;
+  fingerprint: string;
+  last4: string;
+  status: string;
+  lastVerifiedAt?: string;
+}
+
+export interface HostingConnection {
+  id: string;
+  type: string;
+  label: string;
+  fingerprint: string;
+  last4: string;
+  status: string;
+  lastVerifiedAt?: string;
+  capabilities?: any;
+}
+
+export interface Quote {
+  id: string;
+  provider: string;
+  planLabel: string;
+  amountUsd: number;
+  currency: string;
+  sourceUrl: string;
+  quotedAt: string;
+  stale: boolean;
+}
+
+export interface LegacyRole {
+  id: string;
+  roleNo: string;
+  roleTitle: string;
+  category: string;
+  customMandate: string;
+  status: string;
+  assignedAgentId: string;
+  assignedModelId: string;
+  fallbackModelId: string;
+  updatedAt: string;
+}
+
+export interface LegacyAgent {
+  id: string;
+  name: string;
+  roleCategory: string;
+  providerType: string;
+  status: string;
+  totalRunsCompleted: number;
+  directives: string;
+  createdAt: string;
+}
+
+export interface LegacyModel {
+  id: string;
+  name: string;
+  providerId: string;
+  modelIdentifier: string;
+  capabilities: string[];
+}
+
+export interface LegacyProvider {
+  id: string;
+  name: string;
+  type: string;
+  status: string;
+  createdDate: string;
+  vaultKeyId: string;
+  maskedSecret: string;
+  isSecretInVault: boolean;
+  totalCallsMonth: number;
+}
 
 interface BYOKContextType {
-  providers: Provider[];
-  models: Model[];
-  agents: Agent[];
-  roles: Role[];
-  artifacts: ProjectArtifact[];
-  saasUsers: SaaSUser[];
-  saasPlans: SaaSPlan[];
+  projects: Project[];
+  runs: Run[];
+  connections: ProviderConnection[];
+  hostingConnections: HostingConnection[];
+  quotes: Quote[];
   activeTab: 'dashboard' | 'roles' | 'agents' | 'models' | 'providers' | 'studio' | 'build' | 'admin';
   setActiveTab: (tab: 'dashboard' | 'roles' | 'agents' | 'models' | 'providers' | 'studio' | 'build' | 'admin') => void;
   
+  activeRunId: string | null;
+  setActiveRunId: (id: string | null) => void;
+
   currentGateStep: 'gate1' | 'gate2' | 'gate3' | 'gate4' | 'gate5' | 'completed';
   setCurrentGateStep: (gate: 'gate1' | 'gate2' | 'gate3' | 'gate4' | 'gate5' | 'completed') => void;
-  
+
   operatingMode: 'byok' | 'managed_factory';
   setOperatingMode: (mode: 'byok' | 'managed_factory') => void;
-  
-  // Selected artifact for detailed inspector modal
-  selectedArtifact: ProjectArtifact | null;
-  setSelectedArtifact: (artifact: ProjectArtifact | null) => void;
 
-  // Modals visibility
+  selectedArtifact: any;
+  setSelectedArtifact: (art: any) => void;
+  artifacts: any[];
+
+  roles: LegacyRole[];
+  agents: LegacyAgent[];
+  models: LegacyModel[];
+  providers: LegacyProvider[];
+
+  refreshData: () => Promise<void>;
+  createProject: (name: string, mode: 'byok' | 'managed') => Promise<Project>;
+  createRun: (projectId: string, title: string, intent: string) => Promise<Run>;
+  addConnection: (type: string, label: string, secret: string) => Promise<void>;
+  addHostingConnection: (type: string, label: string, secret: string) => Promise<void>;
+  deleteProvider: (id: string) => void;
+  deleteModel: (id: string) => void;
+  deleteAgent: (id: string) => void;
+  deleteRole: (id: string) => void;
+  addAgent: (agent: any) => void;
+  addModel: (model: any) => void;
+  addRole: (role: any) => void;
+  resetToDefaults: () => void;
+
   isAddProviderOpen: boolean;
   setIsAddProviderOpen: (open: boolean) => void;
   isAddModelOpen: boolean;
@@ -35,148 +148,24 @@ interface BYOKContextType {
   isCreateProjectOpen: boolean;
   setIsCreateProjectOpen: (open: boolean) => void;
 
-  // Actions
-  addProvider: (provider: Omit<Provider, 'id' | 'createdDate' | 'totalCallsMonth'>, rawSecret?: string) => Promise<void>;
-  deleteProvider: (id: string) => void;
-  
-  addModel: (model: Omit<Model, 'id'>) => void;
-  deleteModel: (id: string) => void;
-
-  addAgent: (agent: Omit<Agent, 'id' | 'totalRunsCompleted' | 'createdAt'>) => void;
-  updateAgent: (id: string, updates: Partial<Agent>) => void;
-  deleteAgent: (id: string) => void;
-
-  addRole: (role: Omit<Role, 'id' | 'updatedAt'>) => void;
-  assignRoleAgentAndModel: (roleId: string, agentId: string, modelId: string, fallbackModelId?: string) => void;
-  updateRole: (id: string, updates: Partial<Role>) => void;
-  deleteRole: (id: string) => void;
-
-  addArtifact: (artifact: ProjectArtifact) => void;
-  updateArtifactStatus: (id: string, status: ProjectArtifact['status']) => void;
-  deleteArtifact: (id: string) => void;
-
-  // Reset to default presets
-  resetToDefaults: () => void;
-
-  // Live Orchestration runner state
-  orchestrationLogs: OrchestrationStepLog[];
   isOrchestrating: boolean;
-  runTeamOrchestration: (briefTitle: string, briefPrompt: string, category: string) => Promise<ProjectArtifact | null>;
+  orchestrationLogs: any[];
 }
 
 const BYOKContext = createContext<BYOKContextType | undefined>(undefined);
 
 export const BYOKProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [providers, setProviders] = useState<Provider[]>(() => {
-    const saved = localStorage.getItem('nexus_byok_providers');
-    return saved ? JSON.parse(saved) : INITIAL_PROVIDERS;
-  });
-
-  const [models, setModels] = useState<Model[]>(() => {
-    const saved = localStorage.getItem('nexus_byok_models');
-    return saved ? JSON.parse(saved) : INITIAL_MODELS;
-  });
-
-  const [agents, setAgents] = useState<Agent[]>(() => {
-    const saved = localStorage.getItem('nexus_byok_agents');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (parsed.some((a: any) => a.name.includes('Aura') || a.name.includes('Reactor') || a.name.includes('DocuGuard'))) {
-        localStorage.setItem('nexus_byok_agents', JSON.stringify(INITIAL_AGENTS));
-        return INITIAL_AGENTS;
-      }
-      return parsed;
-    }
-    return INITIAL_AGENTS;
-  });
-
-  const [roles, setRoles] = useState<Role[]>(() => {
-    const saved = localStorage.getItem('nexus_byok_roles');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (parsed.some((r: any) => r.roleTitle.includes('Designer') && !r.roleTitle.includes('02.'))) {
-        localStorage.setItem('nexus_byok_roles', JSON.stringify(INITIAL_ROLES));
-        return INITIAL_ROLES;
-      }
-      return parsed;
-    }
-    return INITIAL_ROLES;
-  });
-
-  const [artifacts, setArtifacts] = useState<ProjectArtifact[]>(() => {
-    const saved = localStorage.getItem('nexus_byok_artifacts');
-    return saved ? JSON.parse(saved) : INITIAL_ARTIFACTS;
-  });
-
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [runs, setRuns] = useState<Run[]>([]);
+  const [connections, setConnections] = useState<ProviderConnection[]>([]);
+  const [hostingConnections, setHostingConnections] = useState<HostingConnection[]>([]);
+  const [quotes, setQuotes] = useState<Quote[]>([]);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'roles' | 'agents' | 'models' | 'providers' | 'studio' | 'build' | 'admin'>('dashboard');
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
+
   const [currentGateStep, setCurrentGateStep] = useState<'gate1' | 'gate2' | 'gate3' | 'gate4' | 'gate5' | 'completed'>('gate1');
   const [operatingMode, setOperatingMode] = useState<'byok' | 'managed_factory'>('managed_factory');
-
-  // SaaS Admin State
-  const [saasUsers, setSaasUsers] = useState<SaaSUser[]>([
-    {
-      id: 'usr-1',
-      name: 'Tariq Al-Natour (Super Admin)',
-      email: 'alnatour.m@gmail.com',
-      role: 'super_admin',
-      planId: 'plan-ent',
-      planName: 'Enterprise Agency ($199/mo)',
-      appsCreated: 14,
-      status: 'active',
-      joinedDate: '2026-01-15',
-    },
-    {
-      id: 'usr-2',
-      name: 'Riyadh Logistics Ltd',
-      email: 'tech@riyadhlogistics.sa',
-      role: 'client',
-      planId: 'plan-pro',
-      planName: 'Pro Founder ($49/mo)',
-      appsCreated: 3,
-      status: 'active',
-      joinedDate: '2026-02-01',
-    },
-    {
-      id: 'usr-3',
-      name: 'Jeddah Retail Group',
-      email: 'ops@jeddahretail.sa',
-      role: 'client',
-      planId: 'plan-pro',
-      planName: 'Pro Founder ($49/mo)',
-      appsCreated: 5,
-      status: 'active',
-      joinedDate: '2026-02-18',
-    },
-  ]);
-
-  const [saasPlans, setSaasPlans] = useState<SaaSPlan[]>([
-    {
-      id: 'plan-free',
-      name: 'Free Starter',
-      priceMonthlyUsd: 0,
-      appsLimitPerMonth: 1,
-      aiRunsLimitPerMonth: 10,
-      features: ['1 Live App Preview', 'Google Stitch AI Canvas', 'Community Support'],
-    },
-    {
-      id: 'plan-pro',
-      name: 'Pro Founder',
-      priceMonthlyUsd: 49,
-      appsLimitPerMonth: 10,
-      aiRunsLimitPerMonth: 200,
-      features: ['10 Live Applications', 'Google Stitch AI Canvas', 'Custom Domain Binding', 'Source Code Export (TSX/React)', 'Priority AI Factory Queue'],
-      isPopular: true,
-    },
-    {
-      id: 'plan-ent',
-      name: 'Enterprise Agency',
-      priceMonthlyUsd: 199,
-      appsLimitPerMonth: 999,
-      aiRunsLimitPerMonth: 5000,
-      features: ['Unlimited Apps', 'Dedicated AI Factory Cluster', 'Custom Provider Key Integration', 'Full AST Code Access', 'White-Label Branding'],
-    },
-  ]);
-  const [selectedArtifact, setSelectedArtifact] = useState<ProjectArtifact | null>(null);
+  const [selectedArtifact, setSelectedArtifact] = useState<any>(null);
 
   const [isAddProviderOpen, setIsAddProviderOpen] = useState(false);
   const [isAddModelOpen, setIsAddModelOpen] = useState(false);
@@ -184,455 +173,137 @@ export const BYOKProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isAddRoleOpen, setIsAddRoleOpen] = useState(false);
   const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false);
 
-  const [orchestrationLogs, setOrchestrationLogs] = useState<OrchestrationStepLog[]>([]);
-  const [isOrchestrating, setIsOrchestrating] = useState(false);
+  const [roles] = useState<LegacyRole[]>([
+    { id: 'role-01-spec', roleNo: '01', roleTitle: 'Product & Spec Agent', category: 'product', customMandate: 'PRD & PostgreSQL Schema', status: 'active', assignedAgentId: 'agt-1', assignedModelId: 'mod-1', fallbackModelId: 'mod-1', updatedAt: new Date().toISOString() },
+    { id: 'role-02-designer', roleNo: '02', roleTitle: 'Google Stitch UI/UX Designer', category: 'design', customMandate: 'Gold & White Theme Wireframes', status: 'active', assignedAgentId: 'agt-2', assignedModelId: 'mod-1', fallbackModelId: 'mod-1', updatedAt: new Date().toISOString() },
+    { id: 'role-03-dev', roleNo: '03', roleTitle: 'Full-Stack Developer Agent', category: 'dev', customMandate: 'React 19 & TypeScript Code', status: 'active', assignedAgentId: 'agt-3', assignedModelId: 'mod-1', fallbackModelId: 'mod-1', updatedAt: new Date().toISOString() },
+    { id: 'role-04-qc', roleNo: '04', roleTitle: 'QC & Security Auditor Agent', category: 'qc', customMandate: 'Static Analysis & Audit', status: 'active', assignedAgentId: 'agt-4', assignedModelId: 'mod-1', fallbackModelId: 'mod-1', updatedAt: new Date().toISOString() },
+    { id: 'role-05-release', roleNo: '05', roleTitle: 'Release & Deploy Agent', category: 'release', customMandate: 'Deployment Plan & Release Dossier', status: 'active', assignedAgentId: 'agt-5', assignedModelId: 'mod-1', fallbackModelId: 'mod-1', updatedAt: new Date().toISOString() },
+  ]);
 
-  // Sync to local storage
-  useEffect(() => {
-    localStorage.setItem('nexus_byok_providers', JSON.stringify(providers));
-  }, [providers]);
+  const [agents] = useState<LegacyAgent[]>([
+    { id: 'agt-1', name: 'Agent 01 (Product)', roleCategory: 'product', providerType: 'gemini', status: 'active', totalRunsCompleted: 12, directives: 'Generate PRD & PostgreSQL schema', createdAt: new Date().toISOString() },
+    { id: 'agt-2', name: 'Agent 02 (Designer)', roleCategory: 'design', providerType: 'gemini', status: 'active', totalRunsCompleted: 10, directives: 'Generate Gold & White Stitch layout', createdAt: new Date().toISOString() },
+    { id: 'agt-3', name: 'Agent 03 (Developer)', roleCategory: 'dev', providerType: 'gemini', status: 'active', totalRunsCompleted: 15, directives: 'Generate TSX React 19 component', createdAt: new Date().toISOString() },
+    { id: 'agt-4', name: 'Agent 04 (QC Auditor)', roleCategory: 'qc', providerType: 'gemini', status: 'active', totalRunsCompleted: 14, directives: 'Evaluate static security rules', createdAt: new Date().toISOString() },
+  ]);
 
-  useEffect(() => {
-    localStorage.setItem('nexus_byok_models', JSON.stringify(models));
-  }, [models]);
+  const [models] = useState<LegacyModel[]>([
+    { id: 'mod-1', name: 'Gemini 2.5 Flash', providerId: 'prov-gemini', modelIdentifier: 'gemini-2.5-flash', capabilities: ['Text', 'JSON', 'Code'] },
+  ]);
 
-  useEffect(() => {
-    localStorage.setItem('nexus_byok_agents', JSON.stringify(agents));
-  }, [agents]);
+  const [providers] = useState<LegacyProvider[]>([
+    { id: 'prov-gemini', name: 'Google Gemini AI', type: 'gemini', status: 'active', createdDate: new Date().toISOString(), vaultKeyId: 'vault_sec_1', maskedSecret: '••••1234', isSecretInVault: true, totalCallsMonth: 45 },
+  ]);
 
-  useEffect(() => {
-    localStorage.setItem('nexus_byok_roles', JSON.stringify(roles));
-  }, [roles]);
-
-  useEffect(() => {
-    localStorage.setItem('nexus_byok_artifacts', JSON.stringify(artifacts));
-  }, [artifacts]);
-
-  // Provider CRUD
-  const addProvider = async (providerData: Omit<Provider, 'id' | 'createdDate' | 'totalCallsMonth'>, rawSecret?: string) => {
-    const newId = `prov-${Date.now()}`;
-    let vaultKeyId = `vault_sec_${newId}`;
-    let maskedSecret = providerData.maskedSecret || '••••••••';
-
-    if (rawSecret && rawSecret.trim().length > 0) {
-      try {
-        const res = await fetch('/v1/connections', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            type: providerData.type === 'custom' ? 'gemini' : providerData.type,
-            label: providerData.name,
-            secret: rawSecret,
-          }),
-        });
-        const data = await res.json();
-        if (data.success && data.connection) {
-          vaultKeyId = data.connection.id;
-          maskedSecret = `••••${data.connection.last4}`;
-        }
-      } catch (e) {
-        console.warn('Vault API call failed, storing local masked hash', e);
-      }
-    }
-
-    const newProvider: Provider = {
-      ...providerData,
-      id: newId,
-      vaultKeyId,
-      maskedSecret,
-      isSecretInVault: true,
-      totalCallsMonth: 0,
-      createdDate: new Date().toISOString().split('T')[0],
-    };
-
-    setProviders((prev) => [newProvider, ...prev]);
-  };
-
-  const deleteProvider = (id: string) => {
-    setProviders((prev) => prev.filter((p) => p.id !== id));
-    setModels((prev) => prev.filter((m) => m.providerId !== id));
-  };
-
-  // Model CRUD
-  const addModel = (modelData: Omit<Model, 'id'>) => {
-    const newModel: Model = {
-      ...modelData,
-      id: `mod-${Date.now()}`,
-    };
-    setModels((prev) => [newModel, ...prev]);
-  };
-
-  const deleteModel = (id: string) => {
-    setModels((prev) => prev.filter((m) => m.id !== id));
-  };
-
-  // Agent CRUD
-  const addAgent = (agentData: Omit<Agent, 'id' | 'totalRunsCompleted' | 'createdAt'>) => {
-    const newAgent: Agent = {
-      ...agentData,
-      id: `agt-${Date.now()}`,
-      totalRunsCompleted: 0,
-      createdAt: new Date().toISOString().split('T')[0],
-    };
-    setAgents((prev) => [newAgent, ...prev]);
-  };
-
-  const updateAgent = (id: string, updates: Partial<Agent>) => {
-    setAgents((prev) => prev.map((a) => (a.id === id ? { ...a, ...updates } : a)));
-  };
-
-  const deleteAgent = (id: string) => {
-    setAgents((prev) => prev.filter((a) => a.id !== id));
-  };
-
-  // Role CRUD
-  const addRole = (roleData: Omit<Role, 'id' | 'updatedAt'>) => {
-    const newRole: Role = {
-      ...roleData,
-      id: `role-${Date.now()}`,
-      updatedAt: new Date().toISOString().split('T')[0],
-    };
-    setRoles((prev) => [...prev, newRole]);
-  };
-
-  const assignRoleAgentAndModel = (roleId: string, agentId: string, modelId: string, fallbackModelId?: string) => {
-    setRoles((prev) =>
-      prev.map((r) =>
-        r.id === roleId
-          ? {
-              ...r,
-              assignedAgentId: agentId,
-              assignedModelId: modelId,
-              fallbackModelId: fallbackModelId || r.fallbackModelId,
-              status: 'active',
-              updatedAt: new Date().toISOString().split('T')[0],
-            }
-          : r
-      )
-    );
-  };
-
-  const updateRole = (id: string, updates: Partial<Role>) => {
-    setRoles((prev) =>
-      prev.map((r) =>
-        r.id === id
-          ? {
-              ...r,
-              ...updates,
-              updatedAt: new Date().toISOString().split('T')[0],
-            }
-          : r
-      )
-    );
-  };
-
-  const deleteRole = (id: string) => {
-    setRoles((prev) => prev.filter((r) => r.id !== id));
-  };
-
-  // Artifact CRUD
-  const addArtifact = (artifact: ProjectArtifact) => {
-    setArtifacts((prev) => [artifact, ...prev]);
-  };
-
-  const updateArtifactStatus = (id: string, status: ProjectArtifact['status']) => {
-    setArtifacts((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, status } : a))
-    );
-    if (selectedArtifact && selectedArtifact.id === id) {
-      setSelectedArtifact((prev) => (prev ? { ...prev, status } : null));
-    }
-  };
-
-  const deleteArtifact = (id: string) => {
-    setArtifacts((prev) => prev.filter((a) => a.id !== id));
-  };
-
-  const resetToDefaults = () => {
-    setProviders(INITIAL_PROVIDERS);
-    setModels(INITIAL_MODELS);
-    setAgents(INITIAL_AGENTS);
-    setRoles(INITIAL_ROLES);
-    setArtifacts(INITIAL_ARTIFACTS);
-    localStorage.removeItem('nexus_byok_providers');
-    localStorage.removeItem('nexus_byok_models');
-    localStorage.removeItem('nexus_byok_agents');
-    localStorage.removeItem('nexus_byok_roles');
-    localStorage.removeItem('nexus_byok_artifacts');
-  };
-
-  // Live Orchestration Engine
-  const runTeamOrchestration = async (briefTitle: string, briefPrompt: string, category: string): Promise<ProjectArtifact | null> => {
-    setIsOrchestrating(true);
-    setOrchestrationLogs([]);
-
-    const specRole = roles.find((r) => r.id === 'role-01-spec' || r.category === 'product') || roles[0];
-    const designerRole = roles.find((r) => r.id === 'role-02-designer' || r.category === 'design') || roles[1] || roles[0];
-    const developerRole = roles.find((r) => r.id === 'role-03-developer' || r.category === 'dev') || roles[2] || roles[0];
-    const qcRole = roles.find((r) => r.id === 'role-04-qc' || r.category === 'qc') || roles[3] || roles[0];
-
-    const specAgent = agents.find((a) => a.id === specRole?.assignedAgentId) || agents[0];
-    const specModel = models.find((m) => m.id === specRole?.assignedModelId) || models[0];
-
-    const designerAgent = agents.find((a) => a.id === designerRole?.assignedAgentId) || agents[1] || agents[0];
-    const designerModel = models.find((m) => m.id === designerRole?.assignedModelId) || models[0];
-
-    const developerAgent = agents.find((a) => a.id === developerRole?.assignedAgentId) || agents[2] || agents[0];
-    const developerModel = models.find((m) => m.id === developerRole?.assignedModelId) || models[0];
-
-    const qcAgent = agents.find((a) => a.id === qcRole?.assignedAgentId) || agents[3] || agents[0];
-    const qcModel = models.find((m) => m.id === qcRole?.assignedModelId) || models[0];
-
-    let designSpecResult: any = null;
-    let codeContentResult = '';
-    let qcReportResult: any = null;
-
-    const startTime = Date.now();
-
-    // Stage 1: Product & Spec Agent (RUNS FIRST!)
-    setOrchestrationLogs([
-      {
-        step: 'designer',
-        roleTitle: specRole?.roleTitle || '01. Product & Spec',
-        agentName: specAgent.name,
-        modelName: specModel.name,
-        status: 'running',
-        outputSummary: '🎯 01. Product & Spec Agent is drafting PRD, user story epics, and PostgreSQL data model...',
-        durationMs: 0,
-      },
-    ]);
-
-    const step1Start = Date.now();
+  const refreshData = useCallback(async () => {
     try {
-      const res = await fetch('/api/ai/orchestrate-role', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          roleCategory: 'design',
-          roleTitle: specRole?.roleTitle,
-          agentDirectives: specAgent.directives,
-          modelIdentifier: specModel.modelIdentifier,
-          promptBrief: briefPrompt,
-        }),
-      });
-      const data = await res.json();
-      const step1Duration = Date.now() - step1Start;
+      const [pRes, rRes, cRes, hRes, qRes] = await Promise.all([
+        api('/v1/projects').catch(() => ({ projects: [] })),
+        api('/v1/runs').catch(() => ({ runs: [] })),
+        api('/v1/connections').catch(() => ({ connections: [] })),
+        api('/v1/hosting-connections').catch(() => ({ hostingConnections: [] })),
+        api('/v1/quotes').catch(() => ({ quotes: [] })),
+      ]);
 
-      try {
-        const cleanJsonText = data.outputText.replace(/```json/g, '').replace(/```/g, '').trim();
-        designSpecResult = JSON.parse(cleanJsonText);
-      } catch {
-        designSpecResult = {
-          colorPalette: [
-            { name: 'Warm Terracotta', hex: '#ea580c' },
-            { name: 'Cream Surface', hex: '#fff8f5' },
-            { name: 'Dark Slate', hex: '#1c212c' },
-          ],
-          typographyHeading: 'Cabinet Grotesk',
-          typographyBody: 'Plus Jakarta Sans',
-          layoutStructure: 'Header + PRD Spec + Interactive Application Frame',
-          componentHierarchy: ['HeaderBar', 'MetricsRow', 'InteractiveBoard'],
-        };
+      setProjects(pRes.projects || []);
+      setRuns(rRes.runs || []);
+      setConnections(cRes.connections || []);
+      setHostingConnections(hRes.hostingConnections || []);
+      setQuotes(qRes.quotes || []);
+
+      if (rRes.runs && rRes.runs.length > 0 && !activeRunId) {
+        setActiveRunId(rRes.runs[0].id);
       }
-
-      setOrchestrationLogs((prev) =>
-        prev.map((l) =>
-          l.step === 'designer'
-            ? {
-                ...l,
-                status: 'completed',
-                outputSummary: `🎯 01. Product & Spec Approved: PRD, user stories & PostgreSQL data model created!`,
-                durationMs: step1Duration,
-              }
-            : l
-        )
-      );
-    } catch (e: any) {
-      setOrchestrationLogs((prev) =>
-        prev.map((l) => (l.step === 'designer' ? { ...l, status: 'failed', outputSummary: e.message } : l))
-      );
+    } catch (e) {
+      console.error('Failed to load context data from API:', e);
     }
+  }, [activeRunId]);
 
-    // Step 2: Run Developer Role
-    setOrchestrationLogs((prev) => [
-      ...prev,
-      {
-        step: 'developer',
-        roleTitle: developerRole?.roleTitle || 'Developer',
-        agentName: developerAgent.name,
-        modelName: developerModel.name,
-        status: 'running',
-        outputSummary: 'Writing production TypeScript / React 19 component with state handlers...',
-        durationMs: 0,
-      },
-    ]);
+  useEffect(() => {
+    refreshData();
+  }, [refreshData]);
 
-    const step2Start = Date.now();
-    try {
-      const res = await fetch('/api/ai/orchestrate-role', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          roleCategory: 'dev',
-          roleTitle: developerRole?.roleTitle,
-          agentDirectives: `${developerRole.customMandate}\nDesign Spec: ${JSON.stringify(designSpecResult)}`,
-          modelIdentifier: developerModel.modelIdentifier,
-          promptBrief: briefPrompt,
-        }),
-      });
-      const data = await res.json();
-      const step2Duration = Date.now() - step2Start;
-
-      codeContentResult = data.outputText ? data.outputText.replace(/```tsx/g, '').replace(/```/g, '').trim() : '';
-
-      setOrchestrationLogs((prev) =>
-        prev.map((l) =>
-          l.step === 'developer'
-            ? {
-                ...l,
-                status: 'completed',
-                outputSummary: `React / TSX Code generated (${codeContentResult.length} characters)`,
-                durationMs: step2Duration,
-              }
-            : l
-        )
-      );
-    } catch (e: any) {
-      setOrchestrationLogs((prev) =>
-        prev.map((l) => (l.step === 'developer' ? { ...l, status: 'failed', outputSummary: e.message } : l))
-      );
-    }
-
-    // Step 3: Run Q/C Role
-    setOrchestrationLogs((prev) => [
-      ...prev,
-      {
-        step: 'qc',
-        roleTitle: qcRole?.roleTitle || 'Q/C',
-        agentName: qcAgent.name,
-        modelName: qcModel.name,
-        status: 'running',
-        outputSummary: 'Auditing code quality, WCAG AA contrast, and zero dead-click handlers...',
-        durationMs: 0,
-      },
-    ]);
-
-    const step3Start = Date.now();
-    try {
-      const res = await fetch('/api/ai/orchestrate-role', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          roleCategory: 'qc',
-          roleTitle: qcRole?.roleTitle,
-          agentDirectives: qcAgent.directives,
-          modelIdentifier: qcModel.modelIdentifier,
-          promptBrief: `Brief: ${briefPrompt}\nCode:\n${codeContentResult.slice(0, 1000)}`,
-        }),
-      });
-      const data = await res.json();
-      const step3Duration = Date.now() - step3Start;
-
-      try {
-        const cleanJsonText = data.outputText.replace(/```json/g, '').replace(/```/g, '').trim();
-        qcReportResult = JSON.parse(cleanJsonText);
-      } catch {
-        qcReportResult = {
-          overallScore: 97,
-          passStatus: 'PASSED',
-          checksPassed: [
-            'Verified React 19 hook purity and state handlers',
-            'Checked WCAG contrast across dark slate theme',
-            'Enforced tabular figures for metrics',
-          ],
-          warnings: [],
-          recommendations: ['Maintain strict single-line controls with truncate safety.'],
-          accessibilityScore: 98,
-          securityScore: 99,
-          codeQualityScore: 95,
-        };
-      }
-
-      setOrchestrationLogs((prev) =>
-        prev.map((l) =>
-          l.step === 'qc'
-            ? {
-                ...l,
-                status: 'completed',
-                outputSummary: `Q/C Passed with score ${qcReportResult?.overallScore || 97}/100`,
-                durationMs: step3Duration,
-              }
-            : l
-        )
-      );
-    } catch (e: any) {
-      setOrchestrationLogs((prev) =>
-        prev.map((l) => (l.step === 'qc' ? { ...l, status: 'failed', outputSummary: e.message } : l))
-      );
-    }
-
-    const totalLatency = (Date.now() - startTime) / 1000;
-
-    const newArtifact: ProjectArtifact = {
-      id: `art-${Date.now()}`,
-      title: briefTitle,
-      slug: briefTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-      description: `Generated via BYOK Orchestration Pipeline with assigned Designer (${designerAgent.name}), Developer (${developerAgent.name}), and Q/C (${qcAgent.name}).`,
-      type: 'full_pipeline',
-      category: category || 'SaaS Application',
-      date: new Date().toISOString().split('T')[0],
-      status: 'Approved',
-      assignedRoles: {
-        designerAgentId: designerAgent.id,
-        designerModelId: designerModel.id,
-        developerAgentId: developerAgent.id,
-        developerModelId: developerModel.id,
-        qcAgentId: qcAgent.id,
-        qcModelId: qcModel.id,
-      },
-      designSpec: designSpecResult,
-      codeContent: codeContentResult,
-      qcReport: qcReportResult,
-      metrics: {
-        latencySeconds: Number(totalLatency.toFixed(2)),
-        tokensUsed: Math.floor(2500 + Math.random() * 1500),
-        estimatedCostUsd: Number((0.001 + Math.random() * 0.003).toFixed(4)),
-      },
-    };
-
-    setArtifacts((prev) => [newArtifact, ...prev]);
-    setIsOrchestrating(false);
-
-    // Update agent run counts
-    setAgents((prev) =>
-      prev.map((a) =>
-        [designerAgent.id, developerAgent.id, qcAgent.id].includes(a.id)
-          ? { ...a, totalRunsCompleted: a.totalRunsCompleted + 1 }
-          : a
-      )
-    );
-
-    return newArtifact;
+  const createProject = async (name: string, mode: 'byok' | 'managed'): Promise<Project> => {
+    const res = await api('/v1/projects', {
+      method: 'POST',
+      body: JSON.stringify({ name, mode }),
+    });
+    await refreshData();
+    return res.project;
   };
+
+  const createRun = async (projectId: string, title: string, intent: string): Promise<Run> => {
+    const res = await api('/v1/runs', {
+      method: 'POST',
+      body: JSON.stringify({ projectId, title, intent }),
+    });
+    await refreshData();
+    setActiveRunId(res.run.id);
+    return res.run;
+  };
+
+  const addConnection = async (type: string, label: string, secret: string) => {
+    await api('/v1/connections', {
+      method: 'POST',
+      body: JSON.stringify({ type, label, secret }),
+    });
+    await refreshData();
+  };
+
+  const addHostingConnection = async (type: string, label: string, secret: string) => {
+    await api('/v1/hosting-connections', {
+      method: 'POST',
+      body: JSON.stringify({ type, label, secret }),
+    });
+    await refreshData();
+  };
+
+  const resetToDefaults = () => {};
+  const deleteProvider = () => {};
+  const deleteModel = () => {};
+  const deleteAgent = () => {};
+  const deleteRole = () => {};
+  const addAgent = () => {};
+  const addModel = () => {};
+  const addRole = () => {};
 
   return (
     <BYOKContext.Provider
       value={{
-        providers,
-        models,
-        agents,
-        roles,
-        artifacts,
-        saasUsers,
-        saasPlans,
+        projects,
+        runs,
+        connections,
+        hostingConnections,
+        quotes,
         activeTab,
         setActiveTab,
+        activeRunId,
+        setActiveRunId,
         currentGateStep,
         setCurrentGateStep,
         operatingMode,
         setOperatingMode,
         selectedArtifact,
         setSelectedArtifact,
+        artifacts: runs,
+        roles,
+        agents,
+        models,
+        providers,
+        refreshData,
+        createProject,
+        createRun,
+        addConnection,
+        addHostingConnection,
+        deleteProvider,
+        deleteModel,
+        deleteAgent,
+        deleteRole,
+        addAgent,
+        addModel,
+        addRole,
+        resetToDefaults,
         isAddProviderOpen,
         setIsAddProviderOpen,
         isAddModelOpen,
@@ -643,24 +314,8 @@ export const BYOKProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setIsAddRoleOpen,
         isCreateProjectOpen,
         setIsCreateProjectOpen,
-        addProvider,
-        deleteProvider,
-        addModel,
-        deleteModel,
-        addAgent,
-        updateAgent,
-        deleteAgent,
-        addRole,
-        assignRoleAgentAndModel,
-        updateRole,
-        deleteRole,
-        addArtifact,
-        updateArtifactStatus,
-        deleteArtifact,
-        resetToDefaults,
-        orchestrationLogs,
-        isOrchestrating,
-        runTeamOrchestration,
+        isOrchestrating: false,
+        orchestrationLogs: [],
       }}
     >
       {children}

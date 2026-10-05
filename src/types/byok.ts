@@ -146,7 +146,7 @@ export interface DesignSpec {
 
 export interface QCReport {
   overallScore: number; // 0 - 100
-  passStatus: 'PASSED' | 'PASSED_WITH_WARNINGS' | 'FAILED';
+  passStatus: 'passed' | 'passed_with_warnings' | 'failed' | 'passed_static_only';
   checksPassed: string[];
   warnings: string[];
   recommendations: string[];

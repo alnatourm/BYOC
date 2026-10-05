@@ -17,7 +17,16 @@ if (env.DATABASE_URL) {
     max: 20,
   });
 } else {
-  pgliteInstance = new PGlite('./.pglite_data');
+  if (env.NODE_ENV === 'test') {
+    // In-memory PGlite per process for parallel test execution
+    pgliteInstance = new PGlite();
+  } else {
+    try {
+      pgliteInstance = new PGlite('./.pglite_data');
+    } catch {
+      pgliteInstance = new PGlite();
+    }
+  }
 }
 
 export const db: DbClient = {

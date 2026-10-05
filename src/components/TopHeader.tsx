@@ -1,14 +1,23 @@
 import React, { useState } from 'react';
 import { useBYOK } from '../context/BYOKContext';
 
-export const TopHeader: React.FC = () => {
-  const { setActiveTab } = useBYOK();
+interface TopHeaderProps {
+  user?: any;
+  tenant?: any;
+  lang?: 'en' | 'ar';
+  setLang?: (l: 'en' | 'ar') => void;
+}
+
+export const TopHeader: React.FC<TopHeaderProps> = ({ user, tenant, lang = 'en', setLang }) => {
+  const { setActiveTab, connections } = useBYOK();
   const [searchQuery, setSearchQuery] = useState('');
-  const [isArabic, setIsArabic] = useState(false);
+
+  const isSuperAdmin = user?.platformRole === 'super_admin';
+  const activeConn = connections[0];
+  const maskedKeyDisplay = activeConn ? `••••${activeConn.last4}` : null;
 
   return (
     <header className="fixed top-0 left-72 right-0 h-20 bg-[#f8f7f5]/90 backdrop-blur-md z-40 border-b border-[#e2ded8]/60 shadow-[0_1px_6px_rgba(0,0,0,0.02)] px-8 flex items-center justify-between gap-4 font-sans">
-      {/* Search Input */}
       <div className="flex-1 max-w-lg">
         <div className="relative flex items-center">
           <span className="material-symbols-outlined absolute left-4 text-[#948f88] text-[20px]">search</span>
@@ -16,59 +25,56 @@ export const TopHeader: React.FC = () => {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search software, templates, agents... (⌘K)"
+            placeholder="Search software runs, dispatches, gates... (⌘K)"
             className="w-full pl-12 pr-4 py-2.5 rounded-full bg-white border border-[#e2ded8]/70 text-[#1e2229] placeholder-[#948f88] text-xs outline-none focus:border-[#ea580c] focus:ring-2 focus:ring-[#ea580c]/20 shadow-[0_1px_4px_rgba(0,0,0,0.03)] transition-all"
           />
         </div>
       </div>
 
-      {/* Right Header Items */}
       <div className="flex items-center gap-3">
-        {/* Factory Status Badge */}
-        <div className="hidden lg:flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-800">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span>Factory: <strong className="font-bold text-emerald-700">100% Online</strong></span>
-        </div>
+        {maskedKeyDisplay && (
+          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200 text-xs font-mono font-bold text-amber-900">
+            <span className="material-symbols-outlined text-[16px] text-amber-600">key</span>
+            <span>Key: {maskedKeyDisplay}</span>
+          </div>
+        )}
 
-        {/* Build New Software Button */}
         <button
           onClick={() => setActiveTab('build')}
           className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white font-bold text-xs rounded-xl hover:from-orange-600 hover:to-amber-600 shadow-sm shadow-orange-500/25 transition-all cursor-pointer"
         >
           <span className="material-symbols-outlined text-[18px]">add</span>
-          <span>Build New Software</span>
+          <span>Build Software</span>
         </button>
 
-        {/* Language Toggle */}
-        <button
-          onClick={() => setIsArabic((prev) => !prev)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white hover:bg-[#f1eee9] border border-[#e2ded8]/60 text-[#1e2229] font-semibold text-xs transition-colors cursor-pointer"
-        >
-          <span>{isArabic ? 'EN / عربي' : 'عربي / EN'}</span>
-        </button>
+        {setLang && (
+          <button
+            onClick={() => setLang(lang === 'en' ? 'ar' : 'en')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white hover:bg-[#f1eee9] border border-[#e2ded8]/60 text-[#1e2229] font-semibold text-xs transition-colors cursor-pointer"
+          >
+            <span>{lang === 'en' ? 'العربية' : 'English'}</span>
+          </button>
+        )}
 
-        {/* Notification Icon */}
-        <button className="relative w-9 h-9 rounded-full bg-white border border-[#e2ded8]/60 hover:bg-[#f1eee9] flex items-center justify-center text-[#5f6672] transition-colors cursor-pointer">
-          <span className="material-symbols-outlined text-[18px]">notifications</span>
-          <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#ea580c] ring-2 ring-white"></span>
-        </button>
+        {isSuperAdmin && (
+          <button
+            onClick={() => setActiveTab('admin')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#1c212c] text-amber-400 hover:bg-stone-800 border border-amber-500/40 font-bold text-xs shadow-xs transition-colors cursor-pointer"
+            title="Open Super Admin Panel"
+          >
+            <span className="material-symbols-outlined text-[16px]">admin_panel_settings</span>
+            <span>Super Admin</span>
+          </button>
+        )}
 
-        {/* Super Admin Switcher Badge */}
-        <button
-          onClick={() => setActiveTab('admin')}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#1c212c] text-amber-400 hover:bg-stone-800 border border-amber-500/40 font-bold text-xs shadow-xs transition-colors cursor-pointer"
-          title="Open SaaS Super Admin Control Panel"
-        >
-          <span className="material-symbols-outlined text-[16px]">admin_panel_settings</span>
-          <span>Super Admin Panel</span>
-        </button>
-
-        {/* User Profile Badge */}
         <div className="flex items-center gap-2.5 pl-1 py-1 pr-3.5 rounded-full bg-white border border-[#e2ded8]/60 shadow-[0_1px_4px_rgba(0,0,0,0.04)]">
           <div className="w-7 h-7 rounded-full bg-orange-100 border border-orange-200 flex items-center justify-center font-bold text-xs text-[#ea580c]">
-            TA
+            {user?.email ? user.email.slice(0, 2).toUpperCase() : 'US'}
           </div>
-          <span className="font-bold text-xs text-[#1e2229]">Tariq A.</span>
+          <div className="flex flex-col text-left">
+            <span className="font-bold text-xs text-[#1e2229] truncate max-w-[120px]">{user?.email || 'Authenticated User'}</span>
+            <span className="text-[10px] text-stone-500">{tenant?.name || 'Tenant'}</span>
+          </div>
         </div>
       </div>
     </header>

@@ -3,6 +3,9 @@ dist
 .env
 .env.local
 .dev-vault-key
+.dev-session-secret
 *.log
 .pglite
+.pglite_data
+.pglite_data/
 .DS_Store

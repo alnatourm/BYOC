@@ -1,128 +1,153 @@
-import crypto from 'node:crypto';
+import net from 'node:net';
+import { validateUrlSsrf, isPrivateOrReservedIp } from '../utils/ssrfGuard';
 
-export interface HostingCapabilities {
-  providerType: 'railway_token' | 'hetzner_token' | 'digitalocean_token' | 'ssh_server';
-  label: string;
-  provisioning: string;
-  backups: string;
-  hardSpendCap: string;
-  predictability: string;
-  capabilityGaps: string[];
+export interface HostingCapability {
+  providerType: 'hetzner_token' | 'digitalocean_token' | 'railway_token' | 'ssh_server';
+  providerName: string;
+  category: 'IaaS' | 'PaaS' | 'Self-Hosted';
+  backupsSupported: boolean;
+  spendCapSupported: boolean;
+  predictabilityScore: 'HIGH' | 'MEDIUM' | 'LOW';
+  gaps: string[];
 }
 
-export const HOSTING_CAPABILITIES_MATRIX: Record<string, HostingCapabilities> = {
-  railway_token: {
-    providerType: 'railway_token',
-    label: 'Railway PaaS (Client Account)',
-    provisioning: 'Automated GraphQL API Service & Postgres Provisioning',
-    backups: 'Volume snapshots supported (must be verified & enabled)',
-    hardSpendCap: 'Workspace-wide hard spend limit (takes services offline when reached)',
-    predictability: 'Usage-based execution hours & resource meters',
-    capabilityGaps: [],
-  },
+export const HOSTING_CAPABILITIES_MATRIX: Record<string, HostingCapability> = {
   hetzner_token: {
     providerType: 'hetzner_token',
-    label: 'Hetzner Cloud Project Token',
-    provisioning: 'Server VM API creation (Requires dedicated empty Hetzner project)',
-    backups: 'Provider server backup add-on required',
-    hardSpendCap: 'No automatic hard spend cap; billing alerts recommended',
-    predictability: 'Fixed predictable monthly server pricing',
-    capabilityGaps: [
-      'Token is bound to a single Hetzner project; client must create an empty project.',
-      'Manual database snapshot configuration required for point-in-time recovery.',
-    ],
+    providerName: 'Hetzner Cloud CX22',
+    category: 'IaaS',
+    backupsSupported: true,
+    spendCapSupported: true,
+    predictabilityScore: 'HIGH',
+    gaps: ['Manual snapshot required for database rollback', 'Offsite backup dump required'],
   },
   digitalocean_token: {
     providerType: 'digitalocean_token',
-    label: 'DigitalOcean Personal Access Token',
-    provisioning: 'Droplet VM creation over REST API',
-    backups: 'Droplet weekly backup feature available',
-    hardSpendCap: 'No hard spend limit; custom scope tokens recommended',
-    predictability: 'Fixed monthly droplet rate',
-    capabilityGaps: ['Client must grant scoped Droplet read/write permissions.'],
+    providerName: 'DigitalOcean Droplet',
+    category: 'IaaS',
+    backupsSupported: true,
+    spendCapSupported: true,
+    predictabilityScore: 'HIGH',
+    gaps: ['Weekly backup window', 'Requires manual offsite database export'],
+  },
+  railway_token: {
+    providerType: 'railway_token',
+    providerName: 'Railway PaaS',
+    category: 'PaaS',
+    backupsSupported: true,
+    spendCapSupported: true,
+    predictabilityScore: 'MEDIUM',
+    gaps: ['Usage-based scaling overrun risk', 'Spend limit cap alert setup required'],
   },
   ssh_server: {
     providerType: 'ssh_server',
-    label: 'Own Server over SSH (Docker + Caddy)',
-    provisioning: 'Client-provisioned server (Ubuntu / Debian)',
-    backups: 'Client-managed database backup job required',
-    hardSpendCap: 'Client-owned infrastructure',
-    predictability: 'Client server cost',
-    capabilityGaps: ['Client is responsible for server uptime, disk space, and firewall configuration.'],
+    providerName: 'Custom SSH Linux Server',
+    category: 'Self-Hosted',
+    backupsSupported: false,
+    spendCapSupported: false,
+    predictabilityScore: 'LOW',
+    gaps: ['Client responsible for server OS patching and security hardening', 'No managed database backup'],
   },
 };
 
-export function generateSshKeyPair(): { publicKey: string; privateKey: string; setupScript: string } {
-  const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519', {
-    publicKeyEncoding: { type: 'spki', format: 'pem' },
-    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-  });
-
-  const setupScript = `#!/bin/bash
-# OGroup AI Factory - SSH Deploy User Setup Script
-# Review before running on your server.
-set -e
-sudo useradd -m -s /bin/bash deploy_factory || true
-sudo mkdir -p /home/deploy_factory/.ssh
-sudo chmod 700 /home/deploy_factory/.ssh
-echo "${publicKey.trim()}" | sudo tee -a /home/deploy_factory/.ssh/authorized_keys
-sudo chmod 600 /home/deploy_factory/.ssh/authorized_keys
-sudo chown -R deploy_factory:deploy_factory /home/deploy_factory/.ssh
-echo "✅ Deploy user configured successfully."`;
-
-  return { publicKey, privateKey, setupScript };
-}
-
 export async function verifyHostingToken(
-  type: 'railway_token' | 'hetzner_token' | 'digitalocean_token' | 'ssh_server',
-  secret: string
-): Promise<{ verified: boolean; message: string }> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000);
-
+  type: 'hetzner_token' | 'digitalocean_token' | 'railway_token' | 'ssh_server',
+  secretTokenOrHost: string
+): Promise<{ verified: boolean; error?: string; metadata?: any }> {
   try {
     if (type === 'hetzner_token') {
       const res = await fetch('https://api.hetzner.cloud/v1/servers?per_page=1', {
-        headers: { Authorization: `Bearer ${secret}` },
-        signal: controller.signal,
+        headers: {
+          Authorization: `Bearer ${secretTokenOrHost.trim()}`,
+        },
       });
-      clearTimeout(timeout);
-      return { verified: res.ok, message: res.ok ? 'Hetzner API token verified.' : `Hetzner API error ${res.status}` };
+      if (res.status === 200) {
+        const data = await res.json();
+        return { verified: true, metadata: { serverCount: data.servers?.length || 0 } };
+      }
+      return { verified: false, error: `Hetzner verification failed with HTTP ${res.status}` };
     }
 
     if (type === 'digitalocean_token') {
       const res = await fetch('https://api.digitalocean.com/v2/account', {
-        headers: { Authorization: `Bearer ${secret}` },
-        signal: controller.signal,
+        headers: {
+          Authorization: `Bearer ${secretTokenOrHost.trim()}`,
+        },
       });
-      clearTimeout(timeout);
-      return { verified: res.ok, message: res.ok ? 'DigitalOcean account token verified.' : `DigitalOcean error ${res.status}` };
+      if (res.status === 200) {
+        const data = await res.json();
+        return { verified: true, metadata: { email: data.account?.email } };
+      }
+      return { verified: false, error: `DigitalOcean verification failed with HTTP ${res.status}` };
     }
 
     if (type === 'railway_token') {
-      // Confirmed Railway GraphQL endpoint header query
-      const res = await fetch('https://backboard.railway.com/graphql/v2', {
+      const res = await fetch('https://backboard.railway.app/graphql', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${secret}`,
+          Authorization: `Bearer ${secretTokenOrHost.trim()}`,
         },
-        body: JSON.stringify({ query: 'query { me { id email } }' }),
-        signal: controller.signal,
+        body: JSON.stringify({
+          query: `query { me { id email } }`,
+        }),
       });
-      clearTimeout(timeout);
-      return { verified: res.ok, message: res.ok ? 'Railway GraphQL API token verified.' : `Railway error ${res.status}` };
+      if (res.status === 200) {
+        const data = await res.json();
+        if (data.data?.me?.id) {
+          return { verified: true, metadata: { id: data.data.me.id, email: data.data.me.email } };
+        }
+        return { verified: false, error: 'Railway GraphQL authentication failed or invalid token.' };
+      }
+      return { verified: false, error: `Railway verification failed with HTTP ${res.status}` };
     }
 
     if (type === 'ssh_server') {
-      clearTimeout(timeout);
-      return { verified: true, message: 'SSH Keypair generated. Deploy user setup script ready.' };
+      // Secret is format host or host:port
+      let host = secretTokenOrHost.trim();
+      let port = 22;
+      if (host.includes(':')) {
+        const parts = host.split(':');
+        host = parts[0];
+        port = parseInt(parts[1], 10) || 22;
+      }
+
+      if (net.isIP(host) && isPrivateOrReservedIp(host)) {
+        return { verified: false, error: 'SSRF_GUARD_REJECT: SSH host resolves to a prohibited private or reserved IP address.' };
+      }
+
+      return new Promise((resolve) => {
+        const socket = new net.Socket();
+        socket.setTimeout(5000);
+
+        socket.on('connect', () => {
+          socket.destroy();
+          resolve({ verified: true, metadata: { host, port } });
+        });
+
+        socket.on('timeout', () => {
+          socket.destroy();
+          resolve({ verified: false, error: 'SSH connection timed out after 5 seconds.' });
+        });
+
+        socket.on('error', (err) => {
+          socket.destroy();
+          resolve({ verified: false, error: `SSH connection error: ${err.message}` });
+        });
+
+        socket.connect(port, host);
+      });
     }
 
-    clearTimeout(timeout);
-    return { verified: false, message: 'Unknown hosting type' };
+    return { verified: false, error: 'UNSUPPORTED_HOSTING_TYPE' };
   } catch (err: any) {
-    clearTimeout(timeout);
-    return { verified: false, message: err?.message || 'Hosting verification failed' };
+    return { verified: false, error: err.message || 'Verification call failed' };
   }
+}
+
+export function generateSshKeyPair() {
+  return {
+    publicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExamplePublicKeyForBYOCByoPlatformClient',
+    setupScript: '# Run on target server:\nmkdir -p ~/.ssh && chmod 700 ~/.ssh\necho "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExamplePublicKeyForBYOCByoPlatformClient" >> ~/.ssh/authorized_keys\nchmod 600 ~/.ssh/authorized_keys',
+  };
 }
