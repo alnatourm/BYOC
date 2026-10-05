@@ -216,15 +216,19 @@ export const BYOKProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (rawSecret && rawSecret.trim().length > 0) {
       try {
-        const res = await fetch('/api/vault/save-secret', {
+        const res = await fetch('/v1/connections', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ providerId: newId, rawSecret }),
+          body: JSON.stringify({
+            type: providerData.type === 'custom' ? 'gemini' : providerData.type,
+            label: providerData.name,
+            secret: rawSecret,
+          }),
         });
         const data = await res.json();
-        if (data.success) {
-          vaultKeyId = data.vaultKeyId;
-          maskedSecret = data.maskedSecret;
+        if (data.success && data.connection) {
+          vaultKeyId = data.connection.id;
+          maskedSecret = `••••${data.connection.last4}`;
         }
       } catch (e) {
         console.warn('Vault API call failed, storing local masked hash', e);
