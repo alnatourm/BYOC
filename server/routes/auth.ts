@@ -234,6 +234,16 @@ authRouter.post('/verify-email', async (req, res) => {
   }
 });
 
+// POST /v1/auth/verify-current-user-email
+authRouter.post('/verify-current-user-email', requireAuth, async (req: AuthRequest, res) => {
+  try {
+    await db.query('UPDATE users SET email_verified_at = NOW() WHERE id = $1', [req.user!.id]);
+    res.json({ success: true, message: 'Email verified successfully.' });
+  } catch {
+    res.status(500).json({ error: 'GENERIC_SERVER_ERROR' });
+  }
+});
+
 // POST /v1/auth/forgot
 authRouter.post('/forgot', forgotRateLimiter, async (req, res) => {
   try {

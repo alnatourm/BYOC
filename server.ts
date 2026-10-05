@@ -8,7 +8,8 @@ import { env } from './server/config';
 import { db } from './server/db';
 import { runMigrations } from './server/db/migrate';
 import { helmetMiddleware, corsMiddleware } from './server/middleware/logger';
-import { recoverRunningDispatchesOnBoot } from './server/pipeline/watchdog';
+import { recoverRunningDispatchesOnBoot, runWatchdogTimeoutCheck } from './server/pipeline/watchdog';
+import { startBackgroundWorker } from './server/pipeline/worker';
 
 import { authRouter, meHandler } from './server/routes/auth';
 import { requireAuth } from './server/middleware/auth';
@@ -63,11 +64,15 @@ async function startServer() {
   try {
     await runMigrations();
     await recoverRunningDispatchesOnBoot();
+    startBackgroundWorker();
+    setInterval(() => {
+      runWatchdogTimeoutCheck(10).catch(() => {});
+    }, 60000).unref();
   } catch (err: any) {
     console.warn('⚠️ Database initialization notice during startup:', err?.message || err);
   }
 
-  const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+  const port = process.env.PORT === '8080' ? 3000 : (process.env.PORT ? parseInt(process.env.PORT, 10) : 3000);
 
   if (env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
@@ -100,7 +105,7 @@ async function startServer() {
   });
 }
 
-if (process.env.NODE_ENV !== 'test') {
+if (process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
   startServer().catch((err) => {
     console.error('Fatal Server Boot Error:', err);
     process.exit(1);

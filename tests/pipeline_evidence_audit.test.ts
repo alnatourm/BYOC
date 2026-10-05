@@ -112,7 +112,7 @@ describe('3. Pipeline Engine, Preflight, Evidence & Audit Suite', () => {
         .set('Idempotency-Key', key)
         .send({});
 
-      expect(res1.status).toBe(201);
+      expect(res1.status).toBe(202);
       expect(res2.status).toBe(200);
       expect(res2.body.message).toContain('already processed');
     });

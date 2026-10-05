@@ -48,7 +48,7 @@ export async function runMigrations() {
       }
     }
 
-    await db.query('INSERT INTO schema_migrations (version) VALUES ($1)', [version]);
+    await db.query('INSERT INTO schema_migrations (version) VALUES ($1) ON CONFLICT (version) DO NOTHING', [version]);
   }
 }
 

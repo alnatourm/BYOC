@@ -199,7 +199,7 @@ export const INITIAL_AGENTS: Agent[] = [
     name: '04. QC Agent',
     title: 'Quality & Security Auditor',
     avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-    directives: 'Merges QA Testing and Security Auditing. Performs SAST code scanning, Playwright E2E verification, edge-case validation, secret leak checks, and issues 98%+ Q/C scorecards.',
+    directives: 'Merges QA Testing and Security Auditing. Performs SAST code scanning, automated end-to-end verification, edge-case validation, secret leak checks, and issues Q/C scorecards.',
     temperature: 0.1,
     tools: ['cypress_tester', 'eslint_linter'],
     maxRunsPerDay: 1000,
@@ -292,12 +292,12 @@ export const INITIAL_ROLES: Role[] = [
 
 export const INITIAL_ARTIFACTS: ProjectArtifact[] = [
   {
-    id: 'art-faraj-salon',
-    title: 'Faraj Salon & Spa Booking Website',
-    slug: 'faraj-salon-booking',
-    description: 'Full-stack luxury salon booking portal with service selection, staff specialist scheduling, date/time grid, and instant WhatsApp booking notifications.',
+    id: 'art-sample-portal',
+    title: 'SAMPLE - NOT REAL • Customer Self-Service Portal',
+    slug: 'sample-customer-portal',
+    description: 'SAMPLE - NOT REAL • Full-stack customer portal with user profile management, service requests, and automated status notifications.',
     type: 'full_pipeline',
-    category: 'Service Booking SaaS',
+    category: 'Enterprise SaaS Portal',
     date: '2026-10-03',
     status: 'Approved',
     assignedRoles: {

@@ -4,12 +4,11 @@ import crypto from 'node:crypto';
 import { db } from '../db';
 import { requireAuth, requireTenantRole, AuthRequest } from '../middleware/auth';
 import { TenantRepository } from '../db/repository';
-import { transitionStageState, isTransitionAllowed } from '../pipeline/stateMachine';
+import { transitionStageState } from '../pipeline/stateMachine';
 import { runPipelinePreflight } from '../pipeline/preflight';
-import { executeLlmRole } from '../adapters/llm';
 import { evaluateDevEvidence } from '../evidence';
 import { logAuditEvent } from '../audit/chain';
-import { env } from '../config';
+import { voidDownstream } from '../pipeline/voiding';
 
 export const pipelineRouter = Router();
 
@@ -33,6 +32,11 @@ const gateDecisionSchema = z.object({
 
 const updateTenantSettingsSchema = z.object({
   separationOfDuties: z.boolean(),
+});
+
+const uploadArtifactSchema = z.object({
+  content: z.string().min(1, 'Artifact content is required'),
+  mime: z.enum(['text/html', 'image/png', 'application/pdf', 'application/json']).default('text/html'),
 });
 
 // GET /v1/projects
@@ -96,7 +100,7 @@ pipelineRouter.post('/projects', requireAuth, requireTenantRole('owner', 'admin'
     });
   } catch (err: any) {
     if (err instanceof z.ZodError) {
-      return res.status(400).json({ error: 'INVALID_INPUT: ' + err.issues.map((e: any) => e.message).join(', ') });
+      return res.status(400).json({ error: 'INVALID_INPUT: ' + err.issues.map((e) => e.message).join(', ') });
     }
     res.status(500).json({ error: 'GENERIC_SERVER_ERROR' });
   }
@@ -220,7 +224,7 @@ pipelineRouter.post('/runs', requireAuth, requireTenantRole('owner', 'admin', 'r
     });
   } catch (err: any) {
     if (err instanceof z.ZodError) {
-      return res.status(400).json({ error: 'INVALID_INPUT: ' + err.issues.map((e: any) => e.message).join(', ') });
+      return res.status(400).json({ error: 'INVALID_INPUT: ' + err.issues.map((e) => e.message).join(', ') });
     }
     res.status(500).json({ error: 'GENERIC_SERVER_ERROR' });
   }
@@ -307,12 +311,23 @@ pipelineRouter.post('/runs/:id/stages/:stage/start', requireAuth, requireTenantR
         req.user!.id,
         'pipeline.preflight_blocked',
         `stage_run:${stageRun.id}`,
-        { failedChecks: preflight.checks.filter(c => !c.passed) }
+        { failedChecks: preflight.checks.filter((c) => !c.passed) }
       );
 
       return res.status(409).json({
         error: 'PREFLIGHT_BLOCKED: Stage dispatch blocked due to failed preflight checks.',
         checks: preflight.checks,
+      });
+    }
+
+    // Check partial unique index for active dispatch
+    const { rows: activeDispatches } = await db.query(
+      "SELECT id FROM dispatches WHERE stage_run_id = $1 AND state IN ('dispatched', 'running', 'pending')",
+      [stageRun.id]
+    );
+    if (activeDispatches.length > 0) {
+      return res.status(409).json({
+        error: `CONCURRENT_DISPATCH_BLOCKED: Stage ${stageNo} already has an active running dispatch (${activeDispatches[0].id}).`,
       });
     }
 
@@ -335,13 +350,14 @@ pipelineRouter.post('/runs/:id/stages/:stage/start', requireAuth, requireTenantR
         req.user!.id,
         JSON.stringify(preflight.snapshot),
         preflight.hash,
-        'running',
+        'pending',
       ]
     );
 
     await db.query('UPDATE stage_runs SET state = $1 WHERE id = $2', ['running', stageRun.id]);
 
     const jobId = `job_${crypto.randomBytes(12).toString('hex')}`;
+    // PAYLOAD CONTAINS IDS ONLY - ABSOLUTELY NO API KEY
     await db.query(
       `INSERT INTO jobs (id, kind, payload_json, state)
        VALUES ($1, $2, $3, $4)`,
@@ -356,22 +372,11 @@ pipelineRouter.post('/runs/:id/stages/:stage/start', requireAuth, requireTenantR
           stageRunId: stageRun.id,
           dispatchId,
           roleName,
-          apiKey: preflight.decryptedKey,
+          connectionId: preflight.connectionId || undefined,
         }),
         'pending',
       ]
     );
-
-    await processDispatchJob({
-      tenantId: req.membership!.tenantId,
-      userId: req.user!.id,
-      runId: req.params.id,
-      stageNo,
-      stageRunId: stageRun.id,
-      dispatchId,
-      roleName,
-      apiKey: preflight.decryptedKey!,
-    });
 
     await logAuditEvent(
       req.membership!.tenantId,
@@ -381,14 +386,203 @@ pipelineRouter.post('/runs/:id/stages/:stage/start', requireAuth, requireTenantR
       { stageNo, roleName, idempotencyKey }
     );
 
-    res.status(201).json({
+    // Return 202 Accepted immediately
+    res.status(202).json({
       success: true,
       dispatchId,
       stageRunId: stageRun.id,
-      status: 'running',
+      status: 'dispatched',
     });
   } catch (err: any) {
+    if (err?.code === '23505' || err?.message?.includes('idx_active_dispatch')) {
+      return res.status(409).json({ error: 'CONCURRENT_DISPATCH_BLOCKED: Active dispatch already exists for this stage run.' });
+    }
     console.error('Start stage error:', err);
+    res.status(500).json({ error: 'GENERIC_SERVER_ERROR' });
+  }
+});
+
+// GET /v1/gates/:id
+pipelineRouter.get('/gates/:id', requireAuth, requireTenantRole('owner', 'admin', 'requester', 'reviewer', 'viewer'), async (req: AuthRequest, res) => {
+  try {
+    const { rows: gateRows } = await db.query(
+      `SELECT g.*, sr.run_id, sr.stage, sr.state as stage_state, sr.attempt, r.tenant_id, r.intent, r.title, r.project_id
+       FROM gates g
+       JOIN stage_runs sr ON sr.id = g.stage_run_id
+       JOIN runs r ON r.id = sr.run_id
+       WHERE g.id = $1 AND r.tenant_id = $2`,
+      [req.params.id, req.membership!.tenantId]
+    );
+
+    const gate = gateRows[0];
+    if (!gate) {
+      return res.status(404).json({ error: 'NOT_FOUND: Gate not found or cross-tenant access denied.' });
+    }
+
+    const { rows: artifacts } = await db.query(
+      `SELECT * FROM artifacts WHERE stage_run_id = $1 ORDER BY version DESC`,
+      [gate.stage_run_id]
+    );
+
+    const { rows: dispatches } = await db.query(
+      `SELECT * FROM dispatches WHERE stage_run_id = $1 ORDER BY started_at DESC LIMIT 1`,
+      [gate.stage_run_id]
+    );
+    const dispatch = dispatches[0] || null;
+
+    let evidence: any[] = [];
+    if (dispatch) {
+      const { rows: evRows } = await db.query(
+        'SELECT * FROM evidence WHERE dispatch_id = $1 ORDER BY collected_at ASC',
+        [dispatch.id]
+      );
+      evidence = evRows;
+    }
+
+    res.json({
+      gate: {
+        id: gate.id,
+        stageRunId: gate.stage_run_id,
+        gateNo: gate.gate_no,
+        status: gate.status,
+        decidedBy: gate.decided_by,
+        decidedAt: gate.decided_at,
+        comment: gate.comment,
+        artifactShaList: JSON.parse(gate.artifact_sha_list_json || '[]'),
+      },
+      stageRun: {
+        id: gate.stage_run_id,
+        runId: gate.run_id,
+        stage: gate.stage,
+        state: gate.stage_state,
+        attempt: gate.attempt,
+      },
+      run: {
+        id: gate.run_id,
+        projectId: gate.project_id,
+        title: gate.title,
+        intent: gate.intent,
+      },
+      artifacts: artifacts.map((a) => ({
+        id: a.id,
+        kind: a.kind,
+        version: a.version,
+        content: a.content,
+        mime: a.mime,
+        size: a.size,
+        sha256: a.sha256,
+        createdAt: a.created_at,
+      })),
+      evidence: evidence.map((e) => ({
+        id: e.id,
+        checkName: e.check_name,
+        required: e.required,
+        executed: e.executed,
+        result: e.result,
+        detailsJson: e.details_json,
+      })),
+      dispatch: dispatch
+        ? {
+            id: dispatch.id,
+            state: dispatch.state,
+            usageJson: dispatch.usage_json,
+            error: dispatch.error,
+            startedBy: dispatch.started_by,
+            startedAt: dispatch.started_at,
+            preflightSummary: JSON.parse(dispatch.preflight_snapshot_json || '{}'),
+          }
+        : null,
+    });
+  } catch {
+    res.status(500).json({ error: 'GENERIC_SERVER_ERROR' });
+  }
+});
+
+// POST /v1/runs/:id/stages/2/artifacts/upload (Manual Stitch Export Upload)
+pipelineRouter.post('/runs/:id/stages/2/artifacts/upload', requireAuth, requireTenantRole('owner', 'admin', 'requester'), async (req: AuthRequest, res) => {
+  try {
+    const { content, mime } = uploadArtifactSchema.parse(req.body);
+
+    const size = Buffer.from(content).length;
+    if (size > 5 * 1024 * 1024) {
+      return res.status(400).json({ error: 'FILE_TOO_LARGE: Artifact upload exceeds maximum size limit of 5 MB.' });
+    }
+
+    const { rows: runRows } = await db.query(
+      'SELECT id, tenant_id FROM runs WHERE id = $1 AND tenant_id = $2',
+      [req.params.id, req.membership!.tenantId]
+    );
+
+    const run = runRows[0];
+    if (!run) {
+      return res.status(404).json({ error: 'NOT_FOUND: Run not found or cross-tenant access denied.' });
+    }
+
+    const { rows: stageRunRows } = await db.query(
+      'SELECT id, state FROM stage_runs WHERE run_id = $1 AND stage = 2',
+      [run.id]
+    );
+
+    const stageRun = stageRunRows[0];
+    if (!stageRun) {
+      return res.status(404).json({ error: 'NOT_FOUND: Stage 2 run not found.' });
+    }
+
+    const artifactSha = crypto.createHash('sha256').update(content).digest('hex');
+    const artifactId = `art_${crypto.randomBytes(12).toString('hex')}`;
+
+    const { rows: maxVerRows } = await db.query(
+      'SELECT COALESCE(MAX(version), 0)::int as max_version FROM artifacts WHERE stage_run_id = $1',
+      [stageRun.id]
+    );
+    const nextVersion = (maxVerRows[0]?.max_version || 0) + 1;
+
+    await db.query(
+      `INSERT INTO artifacts (id, run_id, stage_run_id, kind, version, content, mime, size, sha256, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [
+        artifactId,
+        run.id,
+        stageRun.id,
+        'design_export',
+        nextVersion,
+        content,
+        mime,
+        size,
+        artifactSha,
+        req.user!.id,
+      ]
+    );
+
+    // Call voidDownstream for Stage 2
+    await voidDownstream(run.id, 2, 'New manual Google Stitch design export uploaded for Stage 2', req.user!.id);
+
+    // Move Stage 2 to awaiting_review
+    await transitionStageState(req.membership!.tenantId, req.user!.id, 'user', stageRun.id, stageRun.state as any, 'awaiting_review');
+
+    await logAuditEvent(
+      req.membership!.tenantId,
+      req.user!.id,
+      'artifact.manual_upload',
+      `artifact:${artifactId}`,
+      { stageNo: 2, kind: 'design_export', size, sha256: artifactSha }
+    );
+
+    res.status(201).json({
+      success: true,
+      artifact: {
+        id: artifactId,
+        kind: 'design_export',
+        version: nextVersion,
+        mime,
+        size,
+        sha256: artifactSha,
+      },
+    });
+  } catch (err: any) {
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ error: 'INVALID_INPUT: ' + err.issues.map((e) => e.message).join(', ') });
+    }
     res.status(500).json({ error: 'GENERIC_SERVER_ERROR' });
   }
 });
@@ -426,9 +620,14 @@ pipelineRouter.post('/gates/:id/decision', requireAuth, requireTenantRole('owner
     }
 
     const { rows: artRows } = await db.query('SELECT sha256 FROM artifacts WHERE stage_run_id = $1', [gate.stage_run_id]);
-    const shaList = artRows.map(a => a.sha256);
+    const shaList = artRows.map((a) => a.sha256);
 
     const targetState = decision === 'approved' ? 'approved' : decision === 'changes_requested' ? 'changes_requested' : 'rejected';
+
+    // If decision changes from approved to changes_requested or rejected:
+    if (gate.status === 'approved' && decision !== 'approved') {
+      await voidDownstream(gate.run_id, gate.gate_no, `Gate ${gate.gate_no} decision changed to ${decision}`, req.user!.id);
+    }
 
     await db.query(
       `UPDATE gates
@@ -467,7 +666,7 @@ pipelineRouter.post('/gates/:id/decision', requireAuth, requireTenantRole('owner
     });
   } catch (err: any) {
     if (err instanceof z.ZodError) {
-      return res.status(400).json({ error: 'INVALID_INPUT: ' + err.issues.map((e: any) => e.message).join(', ') });
+      return res.status(400).json({ error: 'INVALID_INPUT: ' + err.issues.map((e) => e.message).join(', ') });
     }
     res.status(500).json({ error: 'GENERIC_SERVER_ERROR' });
   }
@@ -494,131 +693,8 @@ pipelineRouter.put('/tenant/settings', requireAuth, requireTenantRole('owner'), 
     res.json({ success: true, separationOfDuties });
   } catch (err: any) {
     if (err instanceof z.ZodError) {
-      return res.status(400).json({ error: 'INVALID_INPUT: ' + err.issues.map((e: any) => e.message).join(', ') });
+      return res.status(400).json({ error: 'INVALID_INPUT: ' + err.issues.map((e) => e.message).join(', ') });
     }
     res.status(500).json({ error: 'GENERIC_SERVER_ERROR' });
   }
 });
-
-export async function processDispatchJob(payload: {
-  tenantId: string;
-  userId: string;
-  runId: string;
-  stageNo: number;
-  stageRunId: string;
-  dispatchId: string;
-  roleName: string;
-  apiKey: string;
-}) {
-  const { tenantId, userId, runId, stageNo, stageRunId, dispatchId, roleName, apiKey } = payload;
-
-  const { rows: instRows } = await db.query(
-    'SELECT body FROM instruction_versions WHERE role = $1 ORDER BY version DESC LIMIT 1',
-    [roleName]
-  );
-  const instructionBody = instRows[0]?.body || `You are Role 0${stageNo} ${roleName} Agent. Produce strict JSON output.`;
-
-  let upstreamArtifactsPrompt = '';
-  if (stageNo > 1) {
-    for (let prev = 1; prev < stageNo; prev++) {
-      const { rows: prevArts } = await db.query(
-        `SELECT a.* FROM artifacts a
-         JOIN stage_runs sr ON sr.id = a.stage_run_id
-         WHERE sr.run_id = $1 AND sr.stage = $2 ORDER BY a.version DESC LIMIT 1`,
-        [runId, prev]
-      );
-
-      if (prevArts.length > 0) {
-        const art = prevArts[0];
-        const computedSha = crypto.createHash('sha256').update(art.content).digest('hex');
-        if (computedSha !== art.sha256) {
-          await db.query('UPDATE dispatches SET state = $1, error = $2 WHERE id = $3', [
-            'failed',
-            `ARTIFACT_CHECKSUM_MISMATCH: Upstream Stage ${prev} artifact sha256 mismatch.`,
-            dispatchId,
-          ]);
-          await db.query('UPDATE stage_runs SET state = $1 WHERE id = $2', ['failed', stageRunId]);
-          return;
-        }
-
-        upstreamArtifactsPrompt += `\n\n--- UNTRUSTED ARTIFACT Stage ${prev} (Kind: ${art.kind}, SHA-256: ${art.sha256}) ---\n${art.content}\n--- END UNTRUSTED ARTIFACT ---`;
-      }
-    }
-  }
-
-  const { rows: runRows } = await db.query('SELECT intent FROM runs WHERE id = $1', [runId]);
-  const userIntent = runRows[0]?.intent || 'Build application';
-  const fullPromptBrief = `Primary Run Intent:\n${userIntent}${upstreamArtifactsPrompt}`;
-
-  try {
-    const res = await executeLlmRole(roleName as any, apiKey, fullPromptBrief, instructionBody, 'gemini-2.5-flash');
-
-    if (!res.valid) {
-      await db.query('UPDATE dispatches SET state = $1, error = $2 WHERE id = $3', ['failed', res.validationError, dispatchId]);
-      await db.query('UPDATE stage_runs SET state = $1 WHERE id = $2', ['failed', stageRunId]);
-      return;
-    }
-
-    const artifactContent = typeof res.parsedContent === 'string' ? res.parsedContent : JSON.stringify(res.parsedContent, null, 2);
-    const artifactSha = crypto.createHash('sha256').update(artifactContent).digest('hex');
-    const artifactId = `art_${crypto.randomBytes(12).toString('hex')}`;
-
-    await db.query(
-      `INSERT INTO artifacts (id, run_id, stage_run_id, dispatch_id, kind, version, content, mime, size, sha256, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-      [
-        artifactId,
-        runId,
-        stageRunId,
-        dispatchId,
-        `${roleName}_output`,
-        1,
-        artifactContent,
-        'application/json',
-        Buffer.from(artifactContent).length,
-        artifactSha,
-        userId,
-      ]
-    );
-
-    const devChecks = evaluateDevEvidence('generated_output.ts', artifactContent);
-    for (const check of devChecks) {
-      const evidenceId = `ev_${crypto.randomBytes(12).toString('hex')}`;
-      await db.query(
-        `INSERT INTO evidence (id, dispatch_id, check_name, required, executed, result, details_json)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [
-          evidenceId,
-          dispatchId,
-          check.checkName,
-          check.required,
-          check.executed,
-          check.result,
-          JSON.stringify(check.details || {}),
-        ]
-      );
-    }
-
-    const testExecId = `ev_${crypto.randomBytes(12).toString('hex')}`;
-    const requireTestExec = env.REQUIRE_TEST_EXECUTION === 'true';
-    await db.query(
-      `INSERT INTO evidence (id, dispatch_id, check_name, required, executed, result, details_json)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [
-        testExecId,
-        dispatchId,
-        'qc_dynamic_test_execution',
-        requireTestExec,
-        false,
-        requireTestExec ? 'fail' : 'pass',
-        JSON.stringify({ reason: 'no sandbox until Phase 2', qcStatus: 'PASSED_STATIC_ONLY' }),
-      ]
-    );
-
-    await db.query('UPDATE dispatches SET state = $1 WHERE id = $2', ['completed', dispatchId]);
-    await db.query('UPDATE stage_runs SET state = $1 WHERE id = $2', ['awaiting_review', stageRunId]);
-  } catch (err: any) {
-    await db.query('UPDATE dispatches SET state = $1, error = $2 WHERE id = $3', ['failed', err.message, dispatchId]);
-    await db.query('UPDATE stage_runs SET state = $1 WHERE id = $2', ['failed', stageRunId]);
-  }
-}

@@ -5,6 +5,7 @@ import { requireAuth, requireTenantRole, AuthRequest } from '../middleware/auth'
 import { TenantRepository } from '../db/repository';
 import { encryptTenantSecret, decryptTenantSecret, computeFingerprint } from '../vault/crypto';
 import { verifyProviderApiKey } from '../vault/verify';
+import { validateUrlSsrf } from '../utils/ssrfGuard';
 import { logAuditEvent } from '../audit/chain';
 
 export const connectionsRouter = Router();
@@ -40,7 +41,7 @@ connectionsRouter.get(
       }));
 
       res.json({ connections: sanitized });
-    } catch (err: any) {
+    } catch {
       res.status(500).json({ error: 'Failed to list connections.' });
     }
   }
@@ -54,6 +55,15 @@ connectionsRouter.post(
   async (req: AuthRequest, res) => {
     try {
       const { type, label, secret, spendCapUsd } = createConnectionSchema.parse(req.body);
+
+      if (type === 'webhook') {
+        try {
+          await validateUrlSsrf(secret);
+        } catch (ssrfErr: any) {
+          return res.status(400).json({ error: ssrfErr.message || 'SSRF_GUARD_REJECT: Invalid or prohibited webhook URL.' });
+        }
+      }
+
       const tenantId = req.membership!.tenantId;
       const connectionId = `conn_${crypto.randomBytes(12).toString('hex')}`;
       const fingerprint = computeFingerprint(secret);
@@ -98,9 +108,9 @@ connectionsRouter.post(
       });
     } catch (err: any) {
       if (err instanceof z.ZodError) {
-        return res.status(400).json({ error: err.issues[0].message });
+        return res.status(400).json({ error: 'INVALID_INPUT: ' + err.issues.map((e) => e.message).join(', ') });
       }
-      res.status(500).json({ error: 'Failed to create provider connection.' });
+      res.status(500).json({ error: err.message || 'Failed to create provider connection.' });
     }
   }
 );
@@ -120,7 +130,6 @@ connectionsRouter.post(
         return res.status(404).json({ error: 'NOT_FOUND: Provider connection not found.' });
       }
 
-      // Decrypt secret in memory ONLY
       const rawSecret = await decryptTenantSecret(
         tenantId,
         conn.id,
@@ -130,9 +139,8 @@ connectionsRouter.post(
         conn.key_version
       );
 
-      // Perform Real Low-Cost Verification Call
-      const result = await verifyProviderApiKey(conn.type, rawSecret);
-      const newStatus = result.verified ? 'verified' : 'failed';
+      const result = await verifyProviderApiKey(conn.type as any, rawSecret);
+      const newStatus = result.verified ? 'active' : 'failed';
 
       await repo.insert('provider_connections', {
         id: conn.id,
@@ -146,14 +154,22 @@ connectionsRouter.post(
         message: result.message,
       });
 
+      if (!result.verified) {
+        return res.status(400).json({
+          success: false,
+          status: newStatus,
+          message: result.message,
+        });
+      }
+
       res.json({
-        success: result.verified,
+        success: true,
         status: newStatus,
         message: result.message,
         lastVerifiedAt: new Date().toISOString(),
       });
     } catch (err: any) {
-      res.status(500).json({ error: 'Failed to verify connection.' });
+      res.status(500).json({ error: err.message || 'Failed to verify connection.' });
     }
   }
 );
@@ -178,7 +194,7 @@ connectionsRouter.delete(
       });
 
       res.json({ success: true, message: 'Connection deleted successfully.' });
-    } catch (err: any) {
+    } catch {
       res.status(500).json({ error: 'Failed to delete connection.' });
     }
   }

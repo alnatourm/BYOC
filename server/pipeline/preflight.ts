@@ -1,6 +1,5 @@
 import { db } from '../db';
-import { decryptTenantSecret } from '../vault/crypto';
-import { verifyHostingToken } from '../hosting/capabilities';
+import crypto from 'node:crypto';
 
 export interface PreflightCheckResult {
   checkName: string;
@@ -14,7 +13,6 @@ export interface PreflightReport {
   checks: PreflightCheckResult[];
   snapshot: any;
   hash: string;
-  decryptedKey?: string;
   connectionId?: string;
 }
 
@@ -57,7 +55,7 @@ export async function runPipelinePreflight(
     });
   }
 
-  // Check 2: Run Existence & Previous Gate Approved + Artifact Checksum Match
+  // Check 2: Run Existence & Upstream Gate Approval + Stored Artifact SHA Verification
   const { rows: runRows } = await db.query('SELECT * FROM runs WHERE id = $1 AND tenant_id = $2', [runId, tenantId]);
   const run = runRows[0];
 
@@ -68,28 +66,67 @@ export async function runPipelinePreflight(
       reason: 'NOT_FOUND: Run not found or cross-tenant access denied.',
     });
   } else if (stageNo > 1) {
-    const prevStage = stageNo - 1;
-    const { rows: gateRows } = await db.query(
-      `SELECT g.*, sr.run_id
-       FROM gates g
-       JOIN stage_runs sr ON sr.id = g.stage_run_id
-       WHERE sr.run_id = $1 AND sr.stage = $2`,
-      [runId, prevStage]
-    );
+    for (let prev = 1; prev < stageNo; prev++) {
+      const { rows: gateRows } = await db.query(
+        `SELECT g.*, sr.id as prev_stage_run_id
+         FROM gates g
+         JOIN stage_runs sr ON sr.id = g.stage_run_id
+         WHERE sr.run_id = $1 AND sr.stage = $2`,
+        [runId, prev]
+      );
 
-    const prevGate = gateRows[0];
-    if (!prevGate || prevGate.status !== 'approved') {
-      checks.push({
-        checkName: 'previous_gate_approved',
-        passed: false,
-        reason: `GATE_BLOCKED: Gate ${prevStage} must be approved before Stage ${stageNo} can start.`,
-      });
-    } else {
-      checks.push({
-        checkName: 'previous_gate_approved',
-        passed: true,
-        details: { prevGateNo: prevStage, status: prevGate.status },
-      });
+      const prevGate = gateRows[0];
+      if (!prevGate) {
+        checks.push({
+          checkName: `upstream_gate_${prev}_approved`,
+          passed: false,
+          reason: `GATE_BLOCKED: Gate ${prev} has not been generated yet.`,
+        });
+      } else if (prevGate.status === 'void') {
+        checks.push({
+          checkName: `upstream_gate_${prev}_approved`,
+          passed: false,
+          reason: `GATE_VOIDED: Upstream Gate ${prev} has been voided. Re-approval required before proceeding.`,
+        });
+      } else if (prevGate.status !== 'approved') {
+        checks.push({
+          checkName: `upstream_gate_${prev}_approved`,
+          passed: false,
+          reason: `GATE_BLOCKED: Upstream Gate ${prev} must be approved before Stage ${stageNo} can start.`,
+        });
+      } else {
+        // Compare stored SHA list against current artifact SHAs
+        let storedShas: string[] = [];
+        try {
+          storedShas = JSON.parse(prevGate.artifact_sha_list_json || '[]');
+        } catch {
+          storedShas = [];
+        }
+
+        const { rows: currentArts } = await db.query(
+          'SELECT sha256 FROM artifacts WHERE stage_run_id = $1',
+          [prevGate.prev_stage_run_id]
+        );
+        const currentShas = currentArts.map((a) => a.sha256);
+
+        const shasMatch =
+          storedShas.length === currentShas.length &&
+          storedShas.every((sha) => currentShas.includes(sha));
+
+        if (!shasMatch) {
+          checks.push({
+            checkName: `upstream_gate_${prev}_artifact_sha_match`,
+            passed: false,
+            reason: `ARTIFACT_SHA_MISMATCH: Upstream Stage ${prev} artifact SHAs do not match approved gate SHAs. Please re-review Gate ${prev}.`,
+          });
+        } else {
+          checks.push({
+            checkName: `upstream_gate_${prev}_approved`,
+            passed: true,
+            details: { prevGateNo: prev, status: prevGate.status, shaCount: currentShas.length },
+          });
+        }
+      }
     }
   } else {
     checks.push({
@@ -98,8 +135,7 @@ export async function runPipelinePreflight(
     });
   }
 
-  // Check 3: Project & Role Slot & Provider Connection Live Verification
-  let decryptedKey: string | undefined = undefined;
+  // Check 3: Project & Role Slot & Connection Active Check (NO KEY DECRYPTION)
   let connectionId: string | undefined = undefined;
 
   if (run) {
@@ -145,20 +181,12 @@ export async function runPipelinePreflight(
               reason: 'BYOK_CONNECTION_INACTIVE: Provider connection is inactive or revoked.',
             });
           } else {
-            try {
-              decryptedKey = await decryptTenantSecret(tenantId, conn.id, conn.ciphertext, conn.iv, conn.tag, conn.key_version);
-              checks.push({
-                checkName: 'byok_key_decrypted_and_verified',
-                passed: true,
-                details: { connectionId: conn.id, type: conn.type, fingerprint: conn.fingerprint },
-              });
-            } catch (err: any) {
-              checks.push({
-                checkName: 'byok_key_decryption',
-                passed: false,
-                reason: `DECRYPTION_FAILED: ${err.message}`,
-              });
-            }
+            // NO DECRYPTION PERFORMED OR RETURNED HERE
+            checks.push({
+              checkName: 'byok_connection_verified_active',
+              passed: true,
+              details: { connectionId: conn.id, type: conn.type, fingerprint: conn.fingerprint },
+            });
           }
         }
       } else {
@@ -171,7 +199,6 @@ export async function runPipelinePreflight(
             reason: 'MANAGED_KEY_UNAVAILABLE: Platform GEMINI_API_KEY is not configured.',
           });
         } else {
-          decryptedKey = envKey;
           checks.push({
             checkName: 'managed_mode_preflight',
             passed: true,
@@ -224,7 +251,7 @@ export async function runPipelinePreflight(
     const stageRun = stageRunRows[0];
     if (stageRun) {
       const { rows: activeDispRows } = await db.query(
-        "SELECT id FROM dispatches WHERE stage_run_id = $1 AND state IN ('dispatched', 'running')",
+        "SELECT id FROM dispatches WHERE stage_run_id = $1 AND state IN ('dispatched', 'running', 'pending')",
         [stageRun.id]
       );
 
@@ -297,14 +324,13 @@ export async function runPipelinePreflight(
     checks,
   };
 
-  const hash = require('node:crypto').createHash('sha256').update(JSON.stringify(snapshot)).digest('hex');
+  const hash = crypto.createHash('sha256').update(JSON.stringify(snapshot)).digest('hex');
 
   return {
     passed: overallPassed,
     checks,
     snapshot,
     hash,
-    decryptedKey,
     connectionId,
   };
 }

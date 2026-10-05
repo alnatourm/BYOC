@@ -7,7 +7,7 @@ export async function executeMockRole(role: string): Promise<{ rawOutput: string
 
   if (role === 'spec') {
     const mockSpec = {
-      productName: 'Sameer Saloon',
+      productName: 'Acme Platform',
       prdSummary: 'Grooming service appointment booking platform.',
       epics: [{ epicTitle: 'E1', description: 'Service catalog' }],
       postgresSchema: [{ tableName: 'appointments', columns: 'id, client_name' }],

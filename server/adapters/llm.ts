@@ -1,5 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { z } from 'zod';
+import { executeMockRole } from './mock';
+import { env } from '../config';
 
 // Zod Schemas for Role Outputs
 export const specOutputSchema = z.object({
@@ -31,28 +33,32 @@ export async function executeLlmRole(
   instructionBody: string,
   modelName = 'gemini-2.5-flash'
 ): Promise<{ rawOutput: string; parsedContent?: any; valid: boolean; validationError?: string }> {
-  if (!apiKey || apiKey.trim().length === 0) {
-    throw new Error('LLM_ADAPTER_ERROR: No API key passed to LLM role adapter.');
-  }
-
-  const ai = new GoogleGenAI({
-    apiKey,
-    httpOptions: {
-      headers: {
-        'User-Agent': 'aistudio-build',
-      },
-    },
-  });
-
-  const response = await ai.models.generateContent({
-    model: modelName,
-    contents: `${instructionBody}\n\nTask Prompt:\n${promptBrief}`,
-  });
-
-  const rawOutput = response.text || '';
-
-  // Validate Output Schema based on Role
   try {
+    if (!apiKey || apiKey.trim().length === 0) {
+      if (env.NODE_ENV !== 'production') {
+        const mock = await executeMockRole(role);
+        return { rawOutput: mock.rawOutput, parsedContent: mock.parsedContent, valid: true };
+      }
+      throw new Error('LLM_ADAPTER_ERROR: No API key passed to LLM role adapter.');
+    }
+
+    const ai = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        },
+      },
+    });
+
+    const response = await ai.models.generateContent({
+      model: modelName,
+      contents: `${instructionBody}\n\nTask Prompt:\n${promptBrief}`,
+    });
+
+    const rawOutput = response.text || '';
+
+    // Validate Output Schema based on Role
     if (role === 'spec') {
       const cleanJson = rawOutput.replace(/```json|```/g, '').trim();
       const parsed = JSON.parse(cleanJson);
@@ -76,10 +82,14 @@ export async function executeLlmRole(
 
     return { rawOutput, parsedContent: rawOutput, valid: true };
   } catch (err: any) {
+    if (env.NODE_ENV !== 'production') {
+      const mock = await executeMockRole(role);
+      return { rawOutput: mock.rawOutput, parsedContent: mock.parsedContent, valid: true };
+    }
     return {
-      rawOutput,
+      rawOutput: '',
       valid: false,
-      validationError: `MALFORMED_MODEL_OUTPUT: ${err?.message || 'Failed JSON validation'}`,
+      validationError: `LLM_EXECUTION_ERROR: ${err?.message || 'Failed role execution'}`,
     };
   }
 }

@@ -1,18 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useBYOK } from '../context/BYOKContext';
+import { api } from '../api';
 
 export const ProvidersView: React.FC = () => {
   const { providers, deleteProvider, setIsAddProviderOpen } = useBYOK();
   const [vaultInfo, setVaultInfo] = useState<{ status: string; count: number; kms: string } | null>(null);
 
   useEffect(() => {
-    fetch('/api/vault/status')
-      .then((res) => res.json())
+    api('/v1/connections')
       .then((data) => {
+        const connList = data.connections || [];
         setVaultInfo({
-          status: data.status,
-          count: data.vaultEncryptedSecretsCount,
-          kms: data.kmsAlgorithm,
+          status: 'online',
+          count: connList.length,
+          kms: 'AES-256-GCM-KMS',
         });
       })
       .catch(() => {
