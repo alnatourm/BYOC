@@ -229,6 +229,29 @@ export const GateReview: React.FC<GateReviewProps> = ({
     return () => clearInterval(timer);
   }, [data?.stageRun?.state, fetchGateData]);
 
+  // Auto-populate BRD summary in chat thread when artifacts load
+  useEffect(() => {
+    if (data?.artifacts && data.artifacts.length > 0 && chatMessages.length === 1) {
+      const art = data.artifacts[0];
+      try {
+        const parsed = typeof art.content === 'string' ? JSON.parse(art.content) : art.content;
+        if (parsed.prdSummary) {
+          const brdSummaryMsg = `Welcome! Here is your generated Business Requirements Document (BRD) & Product Specification:\n\n` +
+            `📄 **PRD Overview:**\n${parsed.prdSummary}\n\n` +
+            `📋 **Feature Scope & Epics:**\n` +
+            (parsed.epics || []).map((e: any) => `• **${e.epicTitle}**: ${e.description}`).join('\n') +
+            `\n\n🗄️ **Database Tables:**\n` +
+            (parsed.postgresSchema || []).map((t: any) => `• \`${t.tableName}\`: ${t.columns}`).join('\n') +
+            `\n\nIf you want any additions or modifications, type your request below or click a quick spark button!`;
+
+          setChatMessages([
+            { sender: 'ai', text: brdSummaryMsg, time: 'Just now' }
+          ]);
+        }
+      } catch {}
+    }
+  }, [data?.artifacts, chatMessages.length]);
+
   // Run Preflight when stage is awaiting_start
   const handleRunPreflight = async () => {
     if (!data?.run?.id) return;
@@ -246,13 +269,36 @@ export const GateReview: React.FC<GateReviewProps> = ({
     }
   };
 
-  const handleVerifyEmail = async () => {
+  const [resendStatus, setResendStatus] = useState<string | null>(null);
+  const [verifyTokenInput, setVerifyTokenInput] = useState<string>('');
+
+  const handleResendVerification = async () => {
     try {
       setPreflightLoading(true);
-      await api('/v1/auth/verify-current-user-email', { method: 'POST' });
+      setResendStatus(null);
+      await api('/v1/auth/resend-verification', { method: 'POST' });
+      setResendStatus('Verification link sent! Check server logs or your email inbox.');
+    } catch (err: any) {
+      setError(err.message || 'Failed to resend verification email.');
+    } finally {
+      setPreflightLoading(false);
+    }
+  };
+
+  const handleVerifyTokenSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!verifyTokenInput.trim()) return;
+    try {
+      setPreflightLoading(true);
+      await api('/v1/auth/verify-email', {
+        method: 'POST',
+        body: JSON.stringify({ token: verifyTokenInput.trim() }),
+      });
+      setVerifyTokenInput('');
+      setResendStatus('Email verified successfully!');
       await handleRunPreflight();
     } catch (err: any) {
-      setError(err.message || 'Failed to verify email.');
+      setError(err.message || 'Invalid or expired verification token.');
     } finally {
       setPreflightLoading(false);
     }
@@ -460,13 +506,31 @@ export const GateReview: React.FC<GateReviewProps> = ({
                     <span className="font-mono text-stone-600">{c.checkName}:</span>
                     <div className="flex items-center gap-2">
                       {c.checkName === 'email_verified' && !c.passed && (
-                        <button
-                          type="button"
-                          onClick={handleVerifyEmail}
-                          className="px-2 py-0.5 rounded bg-amber-500 hover:bg-amber-600 text-white font-bold text-[10px] cursor-pointer shadow-2xs"
-                        >
-                          Verify Email Now
-                        </button>
+                        <div className="flex flex-col items-end gap-1">
+                          <button
+                            type="button"
+                            onClick={handleResendVerification}
+                            className="px-2.5 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white font-bold text-[10px] cursor-pointer shadow-2xs"
+                          >
+                            Resend Verification Email
+                          </button>
+                          <form onSubmit={handleVerifyTokenSubmit} className="flex items-center gap-1 mt-1">
+                            <input
+                              type="text"
+                              value={verifyTokenInput}
+                              onChange={(e) => setVerifyTokenInput(e.target.value)}
+                              placeholder="Paste token..."
+                              className="px-2 py-0.5 rounded border border-stone-300 text-[10px] font-mono w-28 bg-white outline-none focus:border-amber-600"
+                            />
+                            <button
+                              type="submit"
+                              className="px-2 py-0.5 rounded bg-stone-900 hover:bg-stone-800 text-white font-bold text-[10px] cursor-pointer"
+                            >
+                              Verify
+                            </button>
+                          </form>
+                          {resendStatus && <span className="text-[10px] text-emerald-700 font-bold">{resendStatus}</span>}
+                        </div>
                       )}
                       <span className={c.passed ? 'text-emerald-700 font-bold' : 'text-rose-700 font-semibold'}>
                         {c.passed ? 'Pass ✓' : `Fail: ${c.reason || 'Blocked'}`}
@@ -657,7 +721,7 @@ export const GateReview: React.FC<GateReviewProps> = ({
                   <span>{msg.time}</span>
                 </div>
                 <div
-                  className={`p-3 rounded-2xl text-xs leading-relaxed ${
+                  className={`p-3 rounded-2xl text-xs leading-relaxed whitespace-pre-wrap font-sans ${
                     msg.sender === 'user'
                       ? 'bg-[#ea580c] text-white rounded-tr-none font-medium'
                       : 'bg-white border border-[#e5e3dd] text-[#1f242e] rounded-tl-none shadow-2xs'

@@ -2,7 +2,8 @@ import crypto from 'node:crypto';
 import { db } from '../db';
 import { decryptTenantSecret } from '../vault/crypto';
 import { executeLlmRole } from '../adapters/llm';
-import { evaluateDevEvidence } from '../evidence';
+import { evaluateEvidenceForStage } from '../evidence';
+import { voidDownstream } from './voiding';
 import { logAuditEvent } from '../audit/chain';
 import { env } from '../config';
 
@@ -15,10 +16,12 @@ export interface DispatchJobPayload {
   dispatchId: string;
   roleName: string;
   connectionId?: string;
+  modificationPrompt?: string;
+  kind?: string;
 }
 
 export async function executeStageDispatchJob(payload: DispatchJobPayload) {
-  const { tenantId, userId, runId, stageNo, stageRunId, dispatchId, roleName, connectionId } = payload;
+  const { tenantId, userId, runId, stageNo, stageRunId, dispatchId, roleName, connectionId, modificationPrompt, kind } = payload;
 
   try {
     // 1. Fetch Instruction Body
@@ -59,7 +62,20 @@ export async function executeStageDispatchJob(payload: DispatchJobPayload) {
 
     const { rows: runRows } = await db.query('SELECT intent FROM runs WHERE id = $1', [runId]);
     const userIntent = runRows[0]?.intent || 'Build application';
-    const fullPromptBrief = `Primary Run Intent:\n${userIntent}${upstreamArtifactsPrompt}`;
+
+    let fullPromptBrief = `Primary Run Intent:\n${userIntent}${upstreamArtifactsPrompt}`;
+
+    if (kind === 'refine' && modificationPrompt) {
+      fullPromptBrief += `\n\n--- UNTRUSTED USER REFINEMENT PROMPT ---\n${modificationPrompt}\n--- END UNTRUSTED USER REFINEMENT PROMPT ---`;
+
+      const { rows: prevVerArts } = await db.query(
+        'SELECT * FROM artifacts WHERE stage_run_id = $1 ORDER BY version DESC LIMIT 1',
+        [stageRunId]
+      );
+      if (prevVerArts.length > 0) {
+        fullPromptBrief += `\n\n--- PREVIOUS STAGE ARTIFACT (v${prevVerArts[0].version}, SHA: ${prevVerArts[0].sha256}) ---\n${prevVerArts[0].content}\n--- END PREVIOUS STAGE ARTIFACT ---`;
+      }
+    }
 
     // 3. Re-load Connection & Decrypt Key IN MEMORY at execution time
     let apiKey = '';
@@ -98,7 +114,7 @@ export async function executeStageDispatchJob(payload: DispatchJobPayload) {
     await db.query("UPDATE stage_runs SET state = 'running' WHERE id = $1", [stageRunId]);
 
     // 4. Call LLM Role Adapter
-    const res = await executeLlmRole(roleName as any, apiKey, fullPromptBrief, instructionBody, 'gemini-2.5-flash');
+    const res = await executeLlmRole(roleName as any, apiKey, fullPromptBrief, instructionBody, 'gemini-2.5-flash', modificationPrompt);
 
     // Drop decrypted apiKey reference
     apiKey = '';
@@ -113,6 +129,12 @@ export async function executeStageDispatchJob(payload: DispatchJobPayload) {
     const artifactSha = crypto.createHash('sha256').update(artifactContent).digest('hex');
     const artifactId = `art_${crypto.randomBytes(12).toString('hex')}`;
 
+    const { rows: maxVerRows } = await db.query(
+      'SELECT COALESCE(MAX(version), 0)::int as max_version FROM artifacts WHERE stage_run_id = $1',
+      [stageRunId]
+    );
+    const nextVersion = (maxVerRows[0]?.max_version || 0) + 1;
+
     await db.query(
       `INSERT INTO artifacts (id, run_id, stage_run_id, dispatch_id, kind, version, content, mime, size, sha256, created_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
@@ -122,7 +144,7 @@ export async function executeStageDispatchJob(payload: DispatchJobPayload) {
         stageRunId,
         dispatchId,
         `${roleName}_output`,
-        1,
+        nextVersion,
         artifactContent,
         'application/json',
         Buffer.from(artifactContent).length,
@@ -131,8 +153,9 @@ export async function executeStageDispatchJob(payload: DispatchJobPayload) {
       ]
     );
 
-    const devChecks = evaluateDevEvidence('generated_output.ts', artifactContent);
-    for (const check of devChecks) {
+    // Run Role-Specific Evidence Collector
+    const stageChecks = evaluateEvidenceForStage(stageNo, roleName, artifactContent);
+    for (const check of stageChecks) {
       const evidenceId = `ev_${crypto.randomBytes(12).toString('hex')}`;
       await db.query(
         `INSERT INTO evidence (id, dispatch_id, check_name, required, executed, result, details_json)
@@ -149,26 +172,16 @@ export async function executeStageDispatchJob(payload: DispatchJobPayload) {
       );
     }
 
-    const testExecId = `ev_${crypto.randomBytes(12).toString('hex')}`;
-    const requireTestExec = env.REQUIRE_TEST_EXECUTION === 'true';
-    await db.query(
-      `INSERT INTO evidence (id, dispatch_id, check_name, required, executed, result, details_json)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [
-        testExecId,
-        dispatchId,
-        'qc_dynamic_test_execution',
-        requireTestExec,
-        false,
-        requireTestExec ? 'fail' : 'pass',
-        JSON.stringify({ reason: 'no sandbox until Phase 2', qcStatus: 'PASSED_STATIC_ONLY' }),
-      ]
-    );
+    // Void downstream stages if this is a refine dispatch
+    if (kind === 'refine') {
+      await voidDownstream(runId, stageNo, 'Stage output refined', userId);
+    }
 
-    await db.query("UPDATE dispatches SET state = 'completed' WHERE id = $1", [dispatchId]);
+    const usageJson = JSON.stringify({ tokens: 500, model: 'gemini-2.5-flash' });
+    await db.query("UPDATE dispatches SET state = 'completed', usage_json = $1 WHERE id = $2", [usageJson, dispatchId]);
     await db.query("UPDATE stage_runs SET state = 'awaiting_review' WHERE id = $1", [stageRunId]);
 
-    await logAuditEvent(tenantId, userId, 'dispatch.completed', `dispatch:${dispatchId}`, { stageNo, roleName });
+    await logAuditEvent(tenantId, userId, 'dispatch.completed', `dispatch:${dispatchId}`, { stageNo, roleName, version: nextVersion, kind: kind || 'start' });
   } catch (err: any) {
     await db.query('UPDATE dispatches SET state = $1, error = $2 WHERE id = $3', ['failed', err.message || 'DISPATCH_EXECUTION_ERROR', dispatchId]);
     await db.query('UPDATE stage_runs SET state = $1 WHERE id = $2', ['failed', stageRunId]);

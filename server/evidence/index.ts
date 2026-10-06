@@ -167,3 +167,19 @@ export function evaluateQCEvidence(filePath: string, codeContent: string): {
     aiOpinion,
   };
 }
+
+export function evaluateEvidenceForStage(stageNo: number, roleName: string, content: string, mime = 'application/json'): EvidenceCheckResult[] {
+  if (stageNo === 1 || roleName === 'spec') {
+    return evaluateSpecEvidence(content);
+  }
+  if (stageNo === 2 || roleName === 'design') {
+    return evaluateDesignEvidence(content, mime, Buffer.from(content).length);
+  }
+  if (stageNo === 3 || roleName === 'dev') {
+    return evaluateDevEvidence('generated_output.ts', content);
+  }
+  if (stageNo === 4 || roleName === 'qc') {
+    return evaluateQCEvidence('generated_output.ts', content).checks;
+  }
+  return evaluateSpecEvidence(content);
+}

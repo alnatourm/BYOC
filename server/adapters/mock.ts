@@ -37,10 +37,10 @@ export async function executeMockRole(role: string, modificationPrompt?: string)
     }
 
     const mockSpec = {
-      productName: 'Gentlemen\'s Salon & Grooming Booking Platform',
+      productName: 'Gentlemen\'s Grooming & Booking Platform',
       prdSummary: modificationPrompt
-        ? `Updated Business Requirements Document (BRD) & PRD Specification reflecting user modification request: "${modificationPrompt}". The platform provides an end-to-end salon booking system with barber schedule management, WhatsApp notifications, and ZATCA tax invoicing.`
-        : 'Comprehensive Business Requirements Document (BRD) & Product Specification Document (PRD) for a premier Salon & Grooming Booking System. The platform features self-service client appointment scheduling, barber staff schedule management, service catalog configuration, automated WhatsApp/SMS booking confirmations, Apple Pay / Mada checkout, and an administrative analytics dashboard.',
+        ? `Updated Business Requirements Document (BRD) & PRD Specification reflecting user modification request: "${modificationPrompt}". The platform provides an end-to-end appointment booking system with barber schedule management, WhatsApp notifications, and ZATCA tax invoicing.`
+        : 'Comprehensive Business Requirements Document (BRD) & Product Specification Document (PRD) for a premier Grooming & Appointment Booking System. The platform features self-service client appointment scheduling, barber staff schedule management, service catalog configuration, automated WhatsApp/SMS booking confirmations, Apple Pay / Mada checkout, and an administrative analytics dashboard.',
       businessGoals: [
         'Reduce booking creation time for customers to under 45 seconds.',
         'Eliminate double-bookings and optimize barber calendar occupancy.',

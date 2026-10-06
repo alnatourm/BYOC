@@ -46,3 +46,4 @@ export function createRateLimiter(limit: number, windowMs: number, keyPrefix: st
 export const loginRateLimiter = createRateLimiter(10, 15 * 60 * 1000, 'login'); // 10/15min
 export const signupRateLimiter = createRateLimiter(5, 60 * 60 * 1000, 'signup'); // 5/hour
 export const forgotRateLimiter = createRateLimiter(5, 60 * 60 * 1000, 'forgot'); // 5/hour
+export const resendVerificationRateLimiter = createRateLimiter(3, 60 * 60 * 1000, 'resend_verification'); // 3/hour

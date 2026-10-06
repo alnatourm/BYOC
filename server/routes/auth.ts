@@ -5,7 +5,7 @@ import { db } from '../db';
 import { hashPassword, verifyPassword } from '../auth/scrypt';
 import { createSession, revokeAllUserSessions, SESSION_COOKIE_NAME } from '../auth/sessions';
 import { requireAuth, AuthRequest } from '../middleware/auth';
-import { signupRateLimiter, loginRateLimiter, forgotRateLimiter } from '../middleware/rateLimit';
+import { signupRateLimiter, loginRateLimiter, forgotRateLimiter, resendVerificationRateLimiter } from '../middleware/rateLimit';
 import { logAuditEvent } from '../audit/chain';
 import { getOrCreateTenantDek } from '../vault/crypto';
 import { isEmailServiceConfigured, createAndSendEmailToken, consumeEmailToken } from '../services/email';
@@ -72,7 +72,18 @@ authRouter.post('/signup', signupRateLimiter, async (req, res) => {
 
     await getOrCreateTenantDek(tenantId, 1);
 
-    if (isEmailServiceConfigured() || env.NODE_ENV === 'development') {
+    let isAutoVerified = false;
+    if (process.env.DEV_AUTO_VERIFY_EMAIL === 'true') {
+      if (env.NODE_ENV === 'development') {
+        isAutoVerified = true;
+      } else {
+        console.warn('[SECURITY] DEV_AUTO_VERIFY_EMAIL is ignored in non-development environment.');
+      }
+    }
+
+    if (isAutoVerified) {
+      await db.query('UPDATE users SET email_verified_at = NOW() WHERE id = $1', [userId]);
+    } else if (isEmailServiceConfigured() || env.NODE_ENV === 'development') {
       await createAndSendEmailToken(userId, lowercaseEmail, 'verification');
     }
 
@@ -234,11 +245,23 @@ authRouter.post('/verify-email', async (req, res) => {
   }
 });
 
-// POST /v1/auth/verify-current-user-email
-authRouter.post('/verify-current-user-email', requireAuth, async (req: AuthRequest, res) => {
+// POST /v1/auth/resend-verification
+authRouter.post('/resend-verification', requireAuth, resendVerificationRateLimiter, async (req: AuthRequest, res) => {
   try {
-    await db.query('UPDATE users SET email_verified_at = NOW() WHERE id = $1', [req.user!.id]);
-    res.json({ success: true, message: 'Email verified successfully.' });
+    const { rows } = await db.query('SELECT email, email_verified_at FROM users WHERE id = $1', [req.user!.id]);
+    const user = rows[0];
+    if (!user) {
+      return res.status(404).json({ error: 'NOT_FOUND: User not found.' });
+    }
+
+    if (user.email_verified_at) {
+      return res.status(400).json({ error: 'EMAIL_ALREADY_VERIFIED: Your email address is already verified.' });
+    }
+
+    await createAndSendEmailToken(req.user!.id, user.email, 'verification');
+    await logAuditEvent(req.membership?.tenantId || 'system', req.user!.id, 'auth.resend_verification', `user:${req.user!.id}`, { email: user.email });
+
+    res.json({ success: true, message: 'Verification email sent successfully.' });
   } catch {
     res.status(500).json({ error: 'GENERIC_SERVER_ERROR' });
   }
