@@ -27,6 +27,21 @@ function FormattedSpecView({ content }: { content: string }) {
         </p>
       </div>
 
+      {/* Business Goals if present */}
+      {Array.isArray(parsed.businessGoals) && parsed.businessGoals.length > 0 && (
+        <div className="p-3.5 rounded-xl bg-amber-50/70 border border-amber-200/90 space-y-1.5">
+          <h5 className="font-bold text-xs text-amber-950 flex items-center gap-1.5">
+            <span className="material-symbols-outlined text-[16px] text-amber-700">target</span>
+            <span>Key Business Goals & Objectives</span>
+          </h5>
+          <ul className="list-disc list-inside space-y-1 text-stone-700 font-sans text-xs">
+            {parsed.businessGoals.map((goal: string, idx: number) => (
+              <li key={idx}>{goal}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Feature Epics */}
       {Array.isArray(parsed.epics) && parsed.epics.length > 0 && (
         <div className="space-y-2">
@@ -116,6 +131,74 @@ export const GateReview: React.FC<GateReviewProps> = ({
 
   // View Mode
   const [viewMode, setViewMode] = useState<'formatted' | 'raw'>('formatted');
+
+  // Refinement Chat State
+  const [refinementPrompt, setRefinementPrompt] = useState('');
+  const [refining, setRefining] = useState(false);
+  const [chatMessages, setChatMessages] = useState<Array<{ sender: 'user' | 'ai'; text: string; time: string }>>([
+    {
+      sender: 'ai',
+      text: `Hello! I am your Stage 0${stageNo} AI Assistant. You can chat with me here to request any additions, changes, or adjustments to the generated document before approving.`,
+      time: 'Just now',
+    },
+  ]);
+
+  const handleDownloadArtifact = (art: any) => {
+    const filename = `${art.kind || 'specification'}_v${art.version || 1}.md`;
+    let fileContent = art.content;
+    try {
+      const parsed = JSON.parse(art.content);
+      if (parsed.prdSummary) {
+        fileContent = `# ${parsed.productName || 'Product Specification'}\n\n## PRD Summary\n${parsed.prdSummary}\n\n## Feature Epics\n${(parsed.epics || []).map((e: any) => `- **${e.epicTitle}**: ${e.description}`).join('\n')}\n\n## Database Schema\n${(parsed.postgresSchema || []).map((t: any) => `- Table **${t.tableName}**: ${t.columns}`).join('\n')}`;
+      }
+    } catch {}
+
+    const blob = new Blob([fileContent], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleRefineDocument = async (customPrompt?: string) => {
+    const promptToSubmit = (customPrompt || refinementPrompt).trim();
+    if (!data?.run?.id || !promptToSubmit) return;
+
+    const userMsg = { sender: 'user' as const, text: promptToSubmit, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
+    setChatMessages((prev) => [...prev, userMsg]);
+    setRefinementPrompt('');
+    setRefining(true);
+
+    try {
+      const res = await api(`/v1/runs/${data.run.id}/stages/${stageNo}/refine`, {
+        method: 'POST',
+        body: JSON.stringify({ modificationPrompt: promptToSubmit }),
+      });
+
+      await fetchGateData();
+      await refreshData();
+
+      const aiMsg = {
+        sender: 'ai' as const,
+        text: res.aiMessage || `Updated Stage 0${stageNo} document to version v${res.artifact?.version || 2}. Review the updated specification above.`,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+      setChatMessages((prev) => [...prev, aiMsg]);
+    } catch (err: any) {
+      const errorMsg = {
+        sender: 'ai' as const,
+        text: `⚠️ Refinement Error: ${err.message || 'Failed to refine document.'}`,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+      setChatMessages((prev) => [...prev, errorMsg]);
+    } finally {
+      setRefining(false);
+    }
+  };
 
   const isRtl = lang === 'ar';
 
@@ -465,13 +548,23 @@ export const GateReview: React.FC<GateReviewProps> = ({
           <div className="space-y-4">
             {artifacts.map((art: any) => (
               <div key={art.id} className="p-5 bg-white rounded-2xl border border-stone-200 shadow-xs space-y-3">
-                <div className="flex items-center justify-between text-xs border-b border-stone-100 pb-3">
+                <div className="flex flex-wrap items-center justify-between text-xs border-b border-stone-100 pb-3 gap-2">
                   <div className="flex items-center gap-2 font-mono">
                     <span className="font-bold text-stone-900">{art.kind}</span>
-                    <span className="px-2 py-0.5 rounded bg-stone-100 text-stone-600 font-bold">v{art.version}</span>
+                    <span className="px-2 py-0.5 rounded bg-orange-100 text-[#ea580c] font-bold">v{art.version}</span>
                   </div>
-                  <div className="text-[11px] text-stone-500 font-mono">
-                    SHA-256: {art.sha256.slice(0, 16)}...
+                  <div className="flex items-center gap-3">
+                    <span className="text-[11px] text-stone-500 font-mono hidden sm:inline">
+                      SHA-256: {art.sha256.slice(0, 16)}...
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadArtifact(art)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#ea580c] hover:bg-orange-700 text-white font-bold text-xs shadow-2xs transition cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">download</span>
+                      <span>Download Document (.md) • تحميل المستند</span>
+                    </button>
                   </div>
                 </div>
 
@@ -528,6 +621,113 @@ export const GateReview: React.FC<GateReviewProps> = ({
             ))}
           </div>
         )}
+
+      {/* INTERACTIVE GEMINI AI STAGE REFINEMENT CHAT */}
+      {artifacts.length > 0 && (
+        <div className="p-6 bg-white rounded-2xl border border-[#e5e3dd] shadow-xs space-y-4 mt-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#e5e3dd] pb-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[#ea580c]">chat</span>
+                <h3 className="font-bold text-sm text-[#1f242e]">
+                  Chat with AI to Modify Document • النقاش والتعديل مع الذكاء الاصطناعي
+                </h3>
+              </div>
+              <p className="text-xs text-[#554336] mt-0.5">
+                Need additions or changes before approving? Type your request below and Gemini AI will instantly update the document above.
+              </p>
+            </div>
+            <span className="px-3 py-1 rounded-full bg-orange-100 text-[#ea580c] text-xs font-bold font-mono shrink-0 self-start sm:self-auto">
+              Stage 0{stageNo} Assistant Active
+            </span>
+          </div>
+
+          {/* Chat Messages Thread */}
+          <div className="p-4 rounded-xl bg-[#faf8f5] border border-[#e5e3dd] space-y-3 max-h-72 overflow-y-auto font-sans">
+            {chatMessages.map((msg, idx) => (
+              <div
+                key={idx}
+                className={`flex flex-col max-w-[85%] ${
+                  msg.sender === 'user' ? 'ml-auto items-end' : 'mr-auto items-start'
+                }`}
+              >
+                <div className="flex items-center gap-1.5 mb-1 text-[11px] text-[#887364] font-medium">
+                  <span>{msg.sender === 'user' ? 'You (Reviewer)' : `Stage 0${stageNo} AI Agent`}</span>
+                  <span>•</span>
+                  <span>{msg.time}</span>
+                </div>
+                <div
+                  className={`p-3 rounded-2xl text-xs leading-relaxed ${
+                    msg.sender === 'user'
+                      ? 'bg-[#ea580c] text-white rounded-tr-none font-medium'
+                      : 'bg-white border border-[#e5e3dd] text-[#1f242e] rounded-tl-none shadow-2xs'
+                  }`}
+                >
+                  {msg.text}
+                </div>
+              </div>
+            ))}
+
+            {refining && (
+              <div className="flex items-center gap-2 p-3 bg-white rounded-xl border border-[#e5e3dd] text-xs text-[#ea580c] font-bold animate-pulse">
+                <span className="material-symbols-outlined animate-spin text-[18px]">sync</span>
+                <span>Gemini AI is updating your document specifications...</span>
+              </div>
+            )}
+          </div>
+
+          {/* Quick Suggestion Chips */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-[#887364] font-semibold">Quick modification sparks:</span>
+            <button
+              type="button"
+              onClick={() => handleRefineDocument('Please add WhatsApp appointment reminders and status notifications epic.')}
+              className="px-2.5 py-1 rounded-full bg-[#faf8f5] hover:bg-orange-100 border border-[#e5e3dd] text-[#1f242e] text-xs transition cursor-pointer"
+            >
+              📱 Add WhatsApp reminders
+            </button>
+            <button
+              type="button"
+              onClick={() => handleRefineDocument('Please include online payment integration for Apple Pay and Mada checkout.')}
+              className="px-2.5 py-1 rounded-full bg-[#faf8f5] hover:bg-orange-100 border border-[#e5e3dd] text-[#1f242e] text-xs transition cursor-pointer"
+            >
+              💳 Include Apple Pay & Mada
+            </button>
+            <button
+              type="button"
+              onClick={() => handleRefineDocument('Please add Arabic PDF invoice receipt generation and tax fields.')}
+              className="px-2.5 py-1 rounded-full bg-[#faf8f5] hover:bg-orange-100 border border-[#e5e3dd] text-[#1f242e] text-xs transition cursor-pointer"
+            >
+              📄 Add Arabic invoice PDF
+            </button>
+          </div>
+
+          {/* Interactive Chat Input Form */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleRefineDocument();
+            }}
+            className="flex items-center gap-2"
+          >
+            <input
+              type="text"
+              value={refinementPrompt}
+              onChange={(e) => setRefinementPrompt(e.target.value)}
+              placeholder="e.g. Please add a discount promo code feature or modify the database schema..."
+              className="flex-1 p-3 rounded-xl border border-[#e5e3dd] bg-[#faf8f5] focus:bg-white focus:border-[#ea580c] text-xs outline-none text-[#1f242e]"
+            />
+            <button
+              type="submit"
+              disabled={refining || !refinementPrompt.trim()}
+              className="px-5 py-3 rounded-xl bg-[#ea580c] hover:bg-orange-700 text-white font-bold text-xs shadow-xs transition disabled:opacity-50 cursor-pointer flex items-center gap-1.5 shrink-0"
+            >
+              <span className="material-symbols-outlined text-[18px]">send</span>
+              <span>{refining ? 'Updating...' : 'Send & Update Document'}</span>
+            </button>
+          </form>
+        </div>
+      )}
 
         {/* MANUAL GOOGLE STITCH DESIGN UPLOAD (STAGE 2) */}
         {stageNo === 2 && (

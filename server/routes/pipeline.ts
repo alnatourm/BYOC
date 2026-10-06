@@ -9,6 +9,7 @@ import { runPipelinePreflight } from '../pipeline/preflight';
 import { evaluateDevEvidence } from '../evidence';
 import { logAuditEvent } from '../audit/chain';
 import { voidDownstream } from '../pipeline/voiding';
+import { executeLlmRole } from '../adapters/llm';
 
 export const pipelineRouter = Router();
 
@@ -578,6 +579,129 @@ pipelineRouter.post('/runs/:id/stages/2/artifacts/upload', requireAuth, requireT
         size,
         sha256: artifactSha,
       },
+    });
+  } catch (err: any) {
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ error: 'INVALID_INPUT: ' + err.issues.map((e) => e.message).join(', ') });
+    }
+    res.status(500).json({ error: 'GENERIC_SERVER_ERROR' });
+  }
+});
+
+const refineStageSchema = z.object({
+  modificationPrompt: z.string().min(2, 'Modification prompt is required'),
+});
+
+// POST /v1/runs/:id/stages/:stage/refine (Interactive AI Document Refinement)
+pipelineRouter.post('/runs/:id/stages/:stage/refine', requireAuth, requireTenantRole('owner', 'admin', 'requester'), async (req: AuthRequest, res) => {
+  try {
+    const { modificationPrompt } = refineStageSchema.parse(req.body);
+    const stageNo = parseInt(req.params.stage, 10);
+
+    if (isNaN(stageNo) || stageNo < 1 || stageNo > 5) {
+      return res.status(400).json({ error: 'INVALID_STAGE: Stage must be an integer between 1 and 5.' });
+    }
+
+    const { rows: runRows } = await db.query(
+      'SELECT id, tenant_id, intent FROM runs WHERE id = $1 AND tenant_id = $2',
+      [req.params.id, req.membership!.tenantId]
+    );
+
+    const run = runRows[0];
+    if (!run) {
+      return res.status(404).json({ error: 'NOT_FOUND: Run not found or cross-tenant access denied.' });
+    }
+
+    const { rows: stageRunRows } = await db.query(
+      'SELECT id, state FROM stage_runs WHERE run_id = $1 AND stage = $2',
+      [run.id, stageNo]
+    );
+
+    const stageRun = stageRunRows[0];
+    if (!stageRun) {
+      return res.status(404).json({ error: 'NOT_FOUND: Stage run not found.' });
+    }
+
+    const roleNames = ['spec', 'design', 'dev', 'qc', 'release'];
+    const roleName = roleNames[stageNo - 1];
+
+    const { rows: instRows } = await db.query(
+      'SELECT body FROM instruction_versions WHERE role = $1 ORDER BY version DESC LIMIT 1',
+      [roleName]
+    );
+    const instructionBody = instRows[0]?.body || `You are Role 0${stageNo} ${roleName} Agent. Produce strict JSON output.`;
+
+    const fullPromptBrief = `Primary Run Intent:\n${run.intent}\n\nModification Request:\n${modificationPrompt}`;
+    const apiKey = process.env.GEMINI_API_KEY || '';
+
+    const llmRes = await executeLlmRole(roleName as any, apiKey, fullPromptBrief, instructionBody, 'gemini-2.5-flash', modificationPrompt);
+
+    const artifactContent = typeof llmRes.parsedContent === 'string' ? llmRes.parsedContent : JSON.stringify(llmRes.parsedContent, null, 2);
+    const artifactSha = crypto.createHash('sha256').update(artifactContent).digest('hex');
+    const artifactId = `art_${crypto.randomBytes(12).toString('hex')}`;
+
+    const { rows: maxVerRows } = await db.query(
+      'SELECT COALESCE(MAX(version), 0)::int as max_version FROM artifacts WHERE stage_run_id = $1',
+      [stageRun.id]
+    );
+    const nextVersion = (maxVerRows[0]?.max_version || 0) + 1;
+
+    await db.query(
+      `INSERT INTO artifacts (id, run_id, stage_run_id, kind, version, content, mime, size, sha256, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [
+        artifactId,
+        run.id,
+        stageRun.id,
+        `${roleName}_output`,
+        nextVersion,
+        artifactContent,
+        'application/json',
+        Buffer.from(artifactContent).length,
+        artifactSha,
+        req.user!.id,
+      ]
+    );
+
+    const devChecks = evaluateDevEvidence('generated_output.ts', artifactContent);
+    for (const check of devChecks) {
+      const evidenceId = `ev_${crypto.randomBytes(12).toString('hex')}`;
+      await db.query(
+        `INSERT INTO evidence (id, check_name, required, executed, result, details_json)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [evidenceId, check.checkName, check.required, check.executed, check.result, JSON.stringify(check.details || {})]
+      );
+    }
+
+    await logAuditEvent(
+      req.membership!.tenantId,
+      req.user!.id,
+      'artifact.refined',
+      `artifact:${artifactId}`,
+      { stageNo, roleName, version: nextVersion, modificationPrompt }
+    );
+
+    let aiMessage = `I have updated the Stage 0${stageNo} document (${roleName}) based on your request: "${modificationPrompt}".`;
+    try {
+      const parsed = JSON.parse(artifactContent);
+      if (parsed.prdSummary) {
+        aiMessage += `\n\n📄 **Updated BRD Summary:**\n${parsed.prdSummary}\n\n📋 **Feature Scope & Epics:**\n` +
+          (parsed.epics || []).map((e: any) => `• **${e.epicTitle}**: ${e.description}`).join('\n') +
+          `\n\n🗄️ **Database Schema:**\n` +
+          (parsed.postgresSchema || []).map((t: any) => `• \`${t.tableName}\`: ${t.columns}`).join('\n');
+      }
+    } catch {}
+
+    res.status(200).json({
+      success: true,
+      artifact: {
+        id: artifactId,
+        kind: `${roleName}_output`,
+        version: nextVersion,
+        content: artifactContent,
+        sha256: artifactSha,
+      },
+      aiMessage,
     });
   } catch (err: any) {
     if (err instanceof z.ZodError) {
