@@ -1,12 +1,14 @@
 import process from 'node:process';
-process.env.NODE_ENV = 'test';
+process.env.NODE_ENV = process.env.NODE_ENV || 'test';
 
 import request from 'supertest';
-import { app } from '../../server';
-import { runMigrations } from '../db/migrate';
-import { db } from '../db';
 
 async function runSecretsAudit() {
+  const { app } = await import('../../server');
+  const { runMigrations } = await import('../db/migrate');
+  const { db } = await import('../db');
+  const { processNextPendingJob } = await import('../pipeline/worker');
+
   console.log('[AUDIT_SECRETS] Initializing database & running migrations...');
   await runMigrations();
 
@@ -81,11 +83,26 @@ async function runSecretsAudit() {
       .post(`/v1/runs/${runId}/stages/1/start`)
       .set('Cookie', cookie)
       .set('x-csrf-token', csrf)
-      .set('Idempotency-Key', `idemp_audit_${Date.now()}`)
+      .set('Idempotency-Key', `idemp_audit_start_${Date.now()}`)
       .send({});
     capturedResponses.push(startRes.body);
 
-    // 5. Query Gate
+    // Process worker job for stage start
+    await processNextPendingJob();
+
+    // 5. Perform Refine Dispatch on Stage 1
+    const refineRes = await request(app)
+      .post(`/v1/runs/${runId}/stages/1/refine`)
+      .set('Cookie', cookie)
+      .set('x-csrf-token', csrf)
+      .set('Idempotency-Key', `idemp_audit_refine_${Date.now()}`)
+      .send({ modificationPrompt: 'Sentinel refinement test prompt for audit' });
+    capturedResponses.push(refineRes.body);
+
+    // Process worker job for refine
+    await processNextPendingJob();
+
+    // 6. Query Gate
     const gateRes = await request(app)
       .get(`/v1/gates/gate_${runId}_g1`)
       .set('Cookie', cookie);

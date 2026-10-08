@@ -11,7 +11,7 @@
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "test": "vitest run",
-    "audit:secrets": "tsx server/scripts/auditSecrets.ts",
+    "audit:secrets": "NODE_ENV=test tsx server/scripts/auditSecrets.ts",
     "verify:install": "tsx server/scripts/verifyInstall.ts",
     "migrate": "tsx server/db/migrate.ts",
     "create-super-admin": "tsx server/scripts/create-super-admin.ts",
