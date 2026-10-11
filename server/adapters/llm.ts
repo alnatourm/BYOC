@@ -31,13 +31,16 @@ export async function executeLlmRole(
   apiKey: string,
   promptBrief: string,
   instructionBody: string,
-  modelName = 'gemini-2.5-flash',
+  modelName = 'gemini-3.8-flash',
   modificationPrompt?: string
 ): Promise<{ rawOutput: string; parsedContent?: any; valid: boolean; validationError?: string }> {
+  // Sanitize obsolete model names to gemini-3.8-flash
+  const effectiveModel = (!modelName || modelName.includes('2.5') || modelName.includes('1.5')) ? 'gemini-3.8-flash' : modelName;
+
   try {
     if (!apiKey || apiKey.trim().length === 0) {
       if (env.NODE_ENV !== 'production') {
-        const mock = await executeMockRole(role, modificationPrompt);
+        const mock = await executeMockRole(role, promptBrief, modificationPrompt);
         return { rawOutput: mock.rawOutput, parsedContent: mock.parsedContent, valid: true };
       }
       throw new Error('LLM_ADAPTER_ERROR: No API key passed to LLM role adapter.');
@@ -53,7 +56,7 @@ export async function executeLlmRole(
     });
 
     const response = await ai.models.generateContent({
-      model: modelName,
+      model: effectiveModel,
       contents: `${instructionBody}\n\nTask Prompt:\n${promptBrief}`,
     });
 
@@ -84,7 +87,7 @@ export async function executeLlmRole(
     return { rawOutput, parsedContent: rawOutput, valid: true };
   } catch (err: any) {
     if (env.NODE_ENV !== 'production') {
-      const mock = await executeMockRole(role, modificationPrompt);
+      const mock = await executeMockRole(role, promptBrief, modificationPrompt);
       return { rawOutput: mock.rawOutput, parsedContent: mock.parsedContent, valid: true };
     }
     return {

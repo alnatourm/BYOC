@@ -258,10 +258,14 @@ authRouter.post('/resend-verification', requireAuth, resendVerificationRateLimit
       return res.status(400).json({ error: 'EMAIL_ALREADY_VERIFIED: Your email address is already verified.' });
     }
 
-    await createAndSendEmailToken(req.user!.id, user.email, 'verification');
+    const { token } = await createAndSendEmailToken(req.user!.id, user.email, 'verification');
     await logAuditEvent(req.membership?.tenantId || 'system', req.user!.id, 'auth.resend_verification', `user:${req.user!.id}`, { email: user.email });
 
-    res.json({ success: true, message: 'Verification email sent successfully.' });
+    res.json({
+      success: true,
+      message: 'Verification email sent successfully.',
+      devToken: env.NODE_ENV === 'development' && !isEmailServiceConfigured() ? token : undefined,
+    });
   } catch {
     res.status(500).json({ error: 'GENERIC_SERVER_ERROR' });
   }

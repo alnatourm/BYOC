@@ -33,8 +33,13 @@ function MainLayout({ user, tenant, onLogout, lang, setLang, onUserVerified }: {
     try {
       setResending(true);
       setResendStatus(null);
-      await api('/v1/auth/resend-verification', { method: 'POST' });
-      setResendStatus('Verification email sent! Check server logs or inbox.');
+      const res = await api('/v1/auth/resend-verification', { method: 'POST' });
+      if (res.devToken) {
+        setVerifyToken(res.devToken);
+        setResendStatus('Dev token auto-filled! Click "Verify" below to verify your email address.');
+      } else {
+        setResendStatus('Verification email sent! Check server logs or inbox.');
+      }
     } catch (err: any) {
       setResendStatus(`Error: ${err.message || 'Failed to resend'}`);
     } finally {

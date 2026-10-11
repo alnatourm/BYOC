@@ -114,7 +114,7 @@ export async function executeStageDispatchJob(payload: DispatchJobPayload) {
     await db.query("UPDATE stage_runs SET state = 'running' WHERE id = $1", [stageRunId]);
 
     // 4. Call LLM Role Adapter
-    const res = await executeLlmRole(roleName as any, apiKey, fullPromptBrief, instructionBody, 'gemini-2.5-flash', modificationPrompt);
+    const res = await executeLlmRole(roleName as any, apiKey, fullPromptBrief, instructionBody, 'gemini-3.8-flash', modificationPrompt);
 
     // Drop decrypted apiKey reference
     apiKey = '';
@@ -177,7 +177,7 @@ export async function executeStageDispatchJob(payload: DispatchJobPayload) {
       await voidDownstream(runId, stageNo, 'Stage output refined', userId);
     }
 
-    const usageJson = JSON.stringify({ tokens: 500, model: 'gemini-2.5-flash' });
+    const usageJson = JSON.stringify({ tokens: 500, model: 'gemini-3.8-flash' });
     await db.query("UPDATE dispatches SET state = 'completed', usage_json = $1 WHERE id = $2", [usageJson, dispatchId]);
     await db.query("UPDATE stage_runs SET state = 'awaiting_review' WHERE id = $1", [stageRunId]);
 

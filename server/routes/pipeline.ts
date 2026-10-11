@@ -91,7 +91,7 @@ pipelineRouter.post('/projects', requireAuth, requireTenantRole('owner', 'admin'
       await db.query(
         `INSERT INTO role_slots (project_id, role, model, constraints_json)
          VALUES ($1, $2, $3, $4)`,
-        [projectId, r, 'gemini-2.5-flash', '{}']
+        [projectId, r, 'gemini-3.8-flash', '{}']
       );
     }
 
@@ -705,7 +705,7 @@ pipelineRouter.post('/runs/:id/stages/:stage/refine', requireAuth, requireTenant
     const fullPromptBrief = `Primary Run Intent:\n${run.intent}\n\nModification Request:\n${modificationPrompt}`;
     const apiKey = process.env.GEMINI_API_KEY || '';
 
-    const llmRes = await executeLlmRole(roleName as any, apiKey, fullPromptBrief, instructionBody, 'gemini-2.5-flash', modificationPrompt);
+    const llmRes = await executeLlmRole(roleName as any, apiKey, fullPromptBrief, instructionBody, 'gemini-3.8-flash', modificationPrompt);
 
     const artifactContent = typeof llmRes.parsedContent === 'string' ? llmRes.parsedContent : JSON.stringify(llmRes.parsedContent, null, 2);
     const artifactSha = crypto.createHash('sha256').update(artifactContent).digest('hex');

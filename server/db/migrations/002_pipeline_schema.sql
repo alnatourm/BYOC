@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS role_slots (
   project_id VARCHAR(64) REFERENCES projects(id) ON DELETE CASCADE,
   role VARCHAR(32) NOT NULL,
   connection_id VARCHAR(64) DEFAULT NULL,
-  model VARCHAR(128) NOT NULL DEFAULT 'gemini-2.5-flash',
+  model VARCHAR(128) NOT NULL DEFAULT 'gemini-3.8-flash',
   instruction_version_id VARCHAR(64) REFERENCES instruction_versions(id),
   constraints_json TEXT DEFAULT '{}',
   PRIMARY KEY (project_id, role)
@@ -173,7 +173,7 @@ CREATE TABLE IF NOT EXISTS jobs (
 -- Seed Default Instruction Versions (Roles 01 to 05)
 INSERT INTO instruction_versions (id, tenant_id, role, version, body)
 VALUES
-  ('inst_spec_v1', NULL, 'spec', 1, 'You are Role 01 Product & Spec Agent. Generate a valid PRD, Epics, and PostgreSQL Schema JSON.'),
+  ('inst_spec_v1', NULL, 'spec', 1, 'You are Role 01 Product & Spec Agent. Analyze the Primary Run Intent and any modification prompts thoroughly. Generate a comprehensive PRD tailored directly to the user''s requested product. Output strict JSON only with no markdown formatting, matching this exact structure: {"productName": string, "prdSummary": string, "epics": [{"epicTitle": string, "description": string}], "postgresSchema": [{"tableName": string, "columns": string}]}'),
   ('inst_design_v1', NULL, 'design', 1, 'You are Role 02 Designer Agent. Generate a valid Google Stitch layout, visual palette, and component hierarchy JSON.'),
   ('inst_dev_v1', NULL, 'dev', 1, 'You are Role 03 Developer Agent. Output clean production-grade TSX code.'),
   ('inst_qc_v1', NULL, 'qc', 1, 'You are Role 04 QC & Security Agent. Evaluate static code analysis and output security diagnostic JSON.'),
