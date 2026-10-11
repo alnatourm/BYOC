@@ -154,6 +154,32 @@ hostingRouter.post(
   }
 );
 
+// DELETE /v1/hosting-connections/:id
+hostingRouter.delete(
+  '/hosting-connections/:id',
+  requireAuth,
+  requireTenantRole('owner', 'admin', 'requester'),
+  async (req: AuthRequest, res) => {
+    try {
+      const tenantId = req.membership!.tenantId;
+      const repo = new TenantRepository(tenantId);
+      const deleted = await repo.deleteOne('hosting_connections', { id: req.params.id });
+
+      if (!deleted) {
+        return res.status(404).json({ error: 'NOT_FOUND: Hosting connection not found.' });
+      }
+
+      await logAuditEvent(tenantId, req.user!.id, 'hosting_connection_delete', 'hosting_connection', {
+        connectionId: req.params.id,
+      });
+
+      res.json({ success: true, message: 'Hosting connection deleted successfully.' });
+    } catch {
+      res.status(500).json({ error: 'Failed to delete hosting connection.' });
+    }
+  }
+);
+
 // POST /v1/hosting-connections/:id/verify
 hostingRouter.post(
   '/hosting-connections/:id/verify',

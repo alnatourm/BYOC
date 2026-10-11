@@ -178,7 +178,7 @@ connectionsRouter.post(
 connectionsRouter.delete(
   '/:id',
   requireAuth,
-  requireTenantRole('owner', 'admin'),
+  requireTenantRole('owner', 'admin', 'requester'),
   async (req: AuthRequest, res) => {
     try {
       const tenantId = req.membership!.tenantId;

@@ -114,6 +114,157 @@ pipelineRouter.post('/projects', requireAuth, requireTenantRole('owner', 'admin'
   }
 });
 
+// GET /v1/projects/:id/role-slots
+pipelineRouter.get('/projects/:id/role-slots', requireAuth, requireTenantRole('owner', 'admin', 'requester', 'viewer'), async (req: AuthRequest, res) => {
+  try {
+    const { rows: projRows } = await db.query(
+      'SELECT id, name, mode FROM projects WHERE id = $1 AND tenant_id = $2',
+      [req.params.id, req.membership!.tenantId]
+    );
+
+    if (projRows.length === 0) {
+      return res.status(404).json({ error: 'NOT_FOUND: Project not found.' });
+    }
+
+    const project = projRows[0];
+
+    const { rows: slotRows } = await db.query(`
+      SELECT rs.role, rs.model, rs.connection_id,
+             pc.label as connection_label, pc.type as connection_type, pc.last4 as connection_last4, pc.status as connection_status,
+             fs.model as factory_model, fs.connection_id as factory_connection_id
+      FROM role_slots rs
+      LEFT JOIN provider_connections pc ON pc.id = rs.connection_id
+      LEFT JOIN system_factory_settings fs ON fs.role = rs.role
+      WHERE rs.project_id = $1
+      ORDER BY rs.role ASC
+    `, [req.params.id]);
+
+    const rolesOrder = ['spec', 'design', 'dev', 'qc', 'release'];
+    const slotsMap = new Map(slotRows.map((s) => [s.role, s]));
+
+    const roleSlots = rolesOrder.map((r) => {
+      const slot = slotsMap.get(r);
+      const isByokCustom = !!slot?.connection_id;
+      return {
+        role: r,
+        model: slot?.model || 'gemini-3.8-flash',
+        connectionId: slot?.connection_id || null,
+        connectionLabel: slot?.connection_label || null,
+        connectionType: slot?.connection_type || null,
+        connectionLast4: slot?.connection_last4 || null,
+        connectionStatus: slot?.connection_status || null,
+        isUsingFactoryKey: !isByokCustom || project.mode === 'managed',
+        factoryModel: slot?.factory_model || 'gemini-3.8-flash',
+      };
+    });
+
+    res.json({
+      project,
+      roleSlots,
+      platformEnvKeyConfigured: !!process.env.GEMINI_API_KEY,
+    });
+  } catch {
+    res.status(500).json({ error: 'GENERIC_SERVER_ERROR' });
+  }
+});
+
+// PATCH /v1/projects/:id/role-slots/:role
+pipelineRouter.patch('/projects/:id/role-slots/:role', requireAuth, requireTenantRole('owner', 'admin', 'requester'), async (req: AuthRequest, res) => {
+  try {
+    const { connectionId, model } = z.object({
+      connectionId: z.string().nullable().optional(),
+      model: z.string().optional(),
+    }).parse(req.body);
+
+    const role = req.params.role;
+    if (!['spec', 'design', 'dev', 'qc', 'release'].includes(role)) {
+      return res.status(400).json({ error: 'INVALID_INPUT: Invalid role name.' });
+    }
+
+    const { rows: projRows } = await db.query(
+      'SELECT id FROM projects WHERE id = $1 AND tenant_id = $2',
+      [req.params.id, req.membership!.tenantId]
+    );
+
+    if (projRows.length === 0) {
+      return res.status(404).json({ error: 'NOT_FOUND: Project not found.' });
+    }
+
+    // Verify connection exists if passed
+    let cleanConnId: string | null = null;
+    if (connectionId && connectionId !== 'system_factory' && connectionId !== 'default') {
+      const { rows: connRows } = await db.query(
+        'SELECT id FROM provider_connections WHERE id = $1 AND tenant_id = $2',
+        [connectionId, req.membership!.tenantId]
+      );
+      if (connRows.length === 0) {
+        return res.status(404).json({ error: 'NOT_FOUND: Provider connection not found.' });
+      }
+      cleanConnId = connectionId;
+    }
+
+    const chosenModel = model || 'gemini-3.8-flash';
+
+    await db.query(`
+      INSERT INTO role_slots (project_id, role, connection_id, model)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (project_id, role) DO UPDATE
+      SET connection_id = EXCLUDED.connection_id,
+          model = EXCLUDED.model
+    `, [req.params.id, role, cleanConnId, chosenModel]);
+
+    await logAuditEvent(
+      req.membership!.tenantId,
+      req.user!.id,
+      'project.role_slot_updated',
+      `project:${req.params.id}:${role}`,
+      { role, connectionId: cleanConnId, model: chosenModel }
+    );
+
+    res.json({ success: true, message: `Role slot '${role}' updated successfully.` });
+  } catch (err: any) {
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ error: 'INVALID_INPUT: ' + err.issues.map((e) => e.message).join(', ') });
+    }
+    res.status(500).json({ error: 'GENERIC_SERVER_ERROR' });
+  }
+});
+
+// PATCH /v1/projects/:id/mode
+pipelineRouter.patch('/projects/:id/mode', requireAuth, requireTenantRole('owner', 'admin', 'requester'), async (req: AuthRequest, res) => {
+  try {
+    const { mode } = z.object({
+      mode: z.enum(['managed', 'byok']),
+    }).parse(req.body);
+
+    const { rows: projRows } = await db.query(
+      'SELECT id FROM projects WHERE id = $1 AND tenant_id = $2',
+      [req.params.id, req.membership!.tenantId]
+    );
+
+    if (projRows.length === 0) {
+      return res.status(404).json({ error: 'NOT_FOUND: Project not found.' });
+    }
+
+    await db.query('UPDATE projects SET mode = $1 WHERE id = $2', [mode, req.params.id]);
+
+    await logAuditEvent(
+      req.membership!.tenantId,
+      req.user!.id,
+      'project.mode_updated',
+      `project:${req.params.id}`,
+      { mode }
+    );
+
+    res.json({ success: true, mode, message: `Project mode updated to '${mode}'.` });
+  } catch (err: any) {
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ error: 'INVALID_INPUT: ' + err.issues.map((e) => e.message).join(', ') });
+    }
+    res.status(500).json({ error: 'GENERIC_SERVER_ERROR' });
+  }
+});
+
 // GET /v1/runs
 pipelineRouter.get('/runs', requireAuth, requireTenantRole('owner', 'admin', 'requester', 'viewer'), async (req: AuthRequest, res) => {
   try {

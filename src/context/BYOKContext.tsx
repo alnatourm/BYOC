@@ -193,7 +193,7 @@ export const BYOKProvider: React.FC<{ children: React.ReactNode }> = ({ children
     { id: 'mod-1', name: 'Gemini 2.5 Flash', providerId: 'prov-gemini', modelIdentifier: 'gemini-2.5-flash', capabilities: ['Text', 'JSON', 'Code'] },
   ]);
 
-  const [providers] = useState<LegacyProvider[]>([
+  const [providers, setProviders] = useState<LegacyProvider[]>([
     { id: 'prov-gemini', name: 'Google Gemini AI', type: 'gemini', status: 'active', createdDate: new Date().toISOString(), vaultKeyId: 'vault_sec_1', maskedSecret: '••••1234', isSecretInVault: true, totalCallsMonth: 45 },
   ]);
 
@@ -261,9 +261,28 @@ export const BYOKProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const deleteProvider = async (id: string) => {
-    await api(`/v1/connections/${id}`, {
-      method: 'DELETE',
-    });
+    try {
+      await api(`/v1/connections/${id}`, {
+        method: 'DELETE',
+      });
+    } catch (e: any) {
+      if (e?.message?.includes('NOT_FOUND') || String(e).includes('NOT_FOUND')) {
+        try {
+          await api(`/v1/hosting-connections/${id}`, {
+            method: 'DELETE',
+          });
+        } catch (err: any) {
+          if (!err?.message?.includes('NOT_FOUND')) {
+            throw err;
+          }
+        }
+      } else {
+        throw e;
+      }
+    }
+    setConnections((prev) => prev.filter((c) => c.id !== id));
+    setHostingConnections((prev) => prev.filter((h) => h.id !== id));
+    setProviders((prev) => prev.filter((p) => p.id !== id));
     await refreshData();
   };
 

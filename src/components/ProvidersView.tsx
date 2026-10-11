@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useBYOK } from '../context/BYOKContext';
 import { AddProviderModal } from './modals/AddProviderModal';
+import { RoleKeysManager } from './RoleKeysManager';
 
 export const ProvidersView: React.FC = () => {
   const { connections, providers, deleteProvider, verifyConnection, setIsAddProviderOpen } = useBYOK();
@@ -29,6 +30,8 @@ export const ProvidersView: React.FC = () => {
         isRealConnection: false,
       }));
 
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
   const handleVerify = async (id: string) => {
     setVerifyingId(id);
     setVerifyMessage(null);
@@ -42,10 +45,14 @@ export const ProvidersView: React.FC = () => {
     }
   };
 
-  const handleDelete = async (id: string, isRealConnection: boolean) => {
-    if (!confirm('Are you sure you want to delete this provider key from the encrypted vault?')) return;
-    if (isRealConnection) {
+  const confirmDelete = async (id: string) => {
+    try {
       await deleteProvider(id);
+      setVerifyMessage({ id, success: true, text: 'Provider key deleted from encrypted vault.' });
+    } catch (err: any) {
+      setVerifyMessage({ id, success: false, text: err.message || 'Failed to delete provider key.' });
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -135,13 +142,36 @@ export const ProvidersView: React.FC = () => {
                 </div>
 
                 <button
-                  onClick={() => handleDelete(item.id, item.isRealConnection)}
-                  className="text-[#948374] hover:text-red-600 transition-colors p-1"
+                  onClick={() => setDeletingId(item.id)}
+                  className="text-[#948374] hover:text-red-600 transition-colors p-1.5 rounded-lg hover:bg-rose-50 cursor-pointer"
                   title="Remove provider key"
                 >
-                  <span className="material-symbols-outlined text-[18px]">delete</span>
+                  <span className="material-symbols-outlined text-[20px]">delete</span>
                 </button>
               </div>
+
+              {deletingId === item.id && (
+                <div className="p-3 bg-rose-50 rounded-xl border border-rose-200 space-y-2 text-xs text-rose-900 animate-in fade-in">
+                  <div className="font-bold flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[16px] text-rose-600">warning</span>
+                    <span>Delete key from encrypted vault?</span>
+                  </div>
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      onClick={() => confirmDelete(item.id)}
+                      className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg text-[11px] cursor-pointer shadow-2xs"
+                    >
+                      Yes, Delete Key
+                    </button>
+                    <button
+                      onClick={() => setDeletingId(null)}
+                      className="px-3 py-1 bg-stone-200 hover:bg-stone-300 text-stone-800 font-bold rounded-lg text-[11px] cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="p-3 bg-[#f9f8f6] rounded-xl border border-[#e2d9d2]/60 space-y-1 font-mono text-xs">
                 <div className="flex items-center justify-between text-[#948374]">
@@ -194,6 +224,9 @@ export const ProvidersView: React.FC = () => {
           </div>
         ))}
       </div>
+
+      {/* Role Slots & Key Binding Manager for End-Users */}
+      <RoleKeysManager />
 
       {/* Render Add Provider Key Modal */}
       <AddProviderModal />

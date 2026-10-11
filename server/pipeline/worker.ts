@@ -81,32 +81,46 @@ export async function executeStageDispatchJob(payload: DispatchJobPayload) {
     let apiKey = '';
     if (connectionId) {
       const { rows: connRows } = await db.query(
-        'SELECT * FROM provider_connections WHERE id = $1 AND tenant_id = $2',
-        [connectionId, tenantId]
+        'SELECT * FROM provider_connections WHERE id = $1',
+        [connectionId]
       );
       const conn = connRows[0];
-      if (!conn || conn.status !== 'active') {
-        await db.query('UPDATE dispatches SET state = $1, error = $2 WHERE id = $3', [
-          'failed',
-          'BYOK_CONNECTION_INACTIVE: Provider connection is inactive or missing.',
-          dispatchId,
-        ]);
-        await db.query('UPDATE stage_runs SET state = $1 WHERE id = $2', ['failed', stageRunId]);
-        return;
+      if (conn && conn.status === 'active') {
+        apiKey = await decryptTenantSecret(conn.tenant_id, conn.id, conn.ciphertext, conn.iv, conn.tag, conn.key_version);
       }
+    }
 
-      apiKey = await decryptTenantSecret(tenantId, conn.id, conn.ciphertext, conn.iv, conn.tag, conn.key_version);
-    } else {
-      apiKey = process.env.GEMINI_API_KEY || '';
-      if (!apiKey && env.NODE_ENV === 'production') {
-        await db.query('UPDATE dispatches SET state = $1, error = $2 WHERE id = $3', [
-          'failed',
-          'MANAGED_KEY_UNAVAILABLE: Platform GEMINI_API_KEY environment variable is not configured.',
-          dispatchId,
-        ]);
-        await db.query('UPDATE stage_runs SET state = $1 WHERE id = $2', ['failed', stageRunId]);
-        return;
+    if (!apiKey) {
+      // Check System Factory Settings for role
+      const { rows: factoryRows } = await db.query(
+        'SELECT connection_id FROM system_factory_settings WHERE role = $1',
+        [roleName]
+      );
+      const factoryConnId = factoryRows[0]?.connection_id;
+      if (factoryConnId) {
+        const { rows: fConnRows } = await db.query(
+          'SELECT * FROM provider_connections WHERE id = $1',
+          [factoryConnId]
+        );
+        const fConn = fConnRows[0];
+        if (fConn && fConn.status === 'active') {
+          apiKey = await decryptTenantSecret(fConn.tenant_id, fConn.id, fConn.ciphertext, fConn.iv, fConn.tag, fConn.key_version);
+        }
       }
+    }
+
+    if (!apiKey) {
+      apiKey = process.env.GEMINI_API_KEY || '';
+    }
+
+    if (!apiKey) {
+      await db.query('UPDATE dispatches SET state = $1, error = $2 WHERE id = $3', [
+        'failed',
+        'MANAGED_KEY_UNAVAILABLE: Neither User BYOK Key, System Factory Key, nor Platform GEMINI_API_KEY is configured.',
+        dispatchId,
+      ]);
+      await db.query('UPDATE stage_runs SET state = $1 WHERE id = $2', ['failed', stageRunId]);
+      return;
     }
 
     // Mark dispatch & stage_run state as running

@@ -159,50 +159,54 @@ export async function runPipelinePreflight(
         reason: `ROLE_SLOT_MISSING: Role slot '${roleName}' is not configured for project.`,
       });
     } else {
-      if (project.mode === 'byok') {
-        if (!slot.connection_id) {
+      if (project.mode === 'byok' && slot.connection_id) {
+        connectionId = slot.connection_id;
+        const { rows: connRows } = await db.query(
+          'SELECT * FROM provider_connections WHERE id = $1 AND tenant_id = $2',
+          [slot.connection_id, tenantId]
+        );
+
+        const conn = connRows[0];
+        if (!conn || conn.status !== 'active') {
           checks.push({
-            checkName: 'byok_connection_configured',
+            checkName: 'byok_connection_active',
             passed: false,
-            reason: `BYOK_CONNECTION_REQUIRED: Role slot '${roleName}' requires an active provider connection in BYOK mode.`,
+            reason: 'BYOK_CONNECTION_INACTIVE: Provider connection is inactive or revoked.',
           });
         } else {
-          connectionId = slot.connection_id;
-          const { rows: connRows } = await db.query(
-            'SELECT * FROM provider_connections WHERE id = $1 AND tenant_id = $2',
-            [slot.connection_id, tenantId]
-          );
-
-          const conn = connRows[0];
-          if (!conn || conn.status !== 'active') {
-            checks.push({
-              checkName: 'byok_connection_active',
-              passed: false,
-              reason: 'BYOK_CONNECTION_INACTIVE: Provider connection is inactive or revoked.',
-            });
-          } else {
-            // NO DECRYPTION PERFORMED OR RETURNED HERE
-            checks.push({
-              checkName: 'byok_connection_verified_active',
-              passed: true,
-              details: { connectionId: conn.id, type: conn.type, fingerprint: conn.fingerprint },
-            });
-          }
+          checks.push({
+            checkName: 'byok_connection_verified_active',
+            passed: true,
+            details: { connectionId: conn.id, type: conn.type, fingerprint: conn.fingerprint },
+          });
         }
       } else {
-        // Managed Mode
+        // Managed Mode / System Factory Fallback
+        const { rows: factoryRows } = await db.query(
+          'SELECT connection_id FROM system_factory_settings WHERE role = $1',
+          [roleName]
+        );
+        const factoryConnId = factoryRows[0]?.connection_id;
         const envKey = process.env.GEMINI_API_KEY;
-        if (!envKey || envKey.trim().length === 0) {
+
+        if (factoryConnId) {
+          connectionId = factoryConnId;
+          checks.push({
+            checkName: 'system_factory_key_configured',
+            passed: true,
+            details: { mode: 'system_factory', factoryConnectionId: factoryConnId },
+          });
+        } else if (envKey && envKey.trim().length > 0) {
+          checks.push({
+            checkName: 'managed_platform_key_available',
+            passed: true,
+            details: { mode: 'managed', platformKey: true },
+          });
+        } else {
           checks.push({
             checkName: 'managed_platform_key_available',
             passed: false,
-            reason: 'MANAGED_KEY_UNAVAILABLE: Platform GEMINI_API_KEY is not configured.',
-          });
-        } else {
-          checks.push({
-            checkName: 'managed_mode_preflight',
-            passed: true,
-            details: { mode: 'managed' },
+            reason: 'MANAGED_KEY_UNAVAILABLE: System Factory Key and Platform GEMINI_API_KEY are not configured.',
           });
         }
       }
