@@ -51,12 +51,3 @@ export async function runMigrations() {
     await db.query('INSERT INTO schema_migrations (version) VALUES ($1) ON CONFLICT (version) DO NOTHING', [version]);
   }
 }
-
-if (import.meta.url === `file://${process.argv[1]}`) {
-  runMigrations()
-    .then(() => process.exit(0))
-    .catch((err) => {
-      console.error('Migration failed:', err);
-      process.exit(1);
-    });
-}

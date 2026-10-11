@@ -11,34 +11,50 @@ export interface DbClient {
 let pool: pg.Pool | null = null;
 let pgliteInstance: PGlite | null = null;
 
+function getPgLite(): PGlite {
+  if (!pgliteInstance) {
+    if (process.env.NODE_ENV === 'test' || env.NODE_ENV === 'test') {
+      pgliteInstance = new PGlite('memory://');
+    } else {
+      try {
+        pgliteInstance = new PGlite('./.pglite_data');
+      } catch {
+        pgliteInstance = new PGlite('memory://');
+      }
+    }
+  }
+  return pgliteInstance;
+}
+
 if (env.DATABASE_URL) {
   pool = new Pool({
     connectionString: env.DATABASE_URL,
     max: 20,
   });
-} else {
-  if (env.NODE_ENV === 'test') {
-    // In-memory PGlite per process for parallel test execution
-    pgliteInstance = new PGlite();
-  } else {
-    try {
-      pgliteInstance = new PGlite('./.pglite_data');
-    } catch {
-      pgliteInstance = new PGlite();
-    }
-  }
 }
+
+let queryQueue: Promise<any> = Promise.resolve();
 
 export const db: DbClient = {
   async query<T = any>(sql: string, params?: any[]): Promise<{ rows: T[] }> {
     if (pool) {
       const res = await pool.query(sql, params);
       return { rows: res.rows };
-    } else if (pgliteInstance) {
-      const res = await pgliteInstance.query(sql, params);
-      return { rows: res.rows as T[] };
     } else {
-      throw new Error('No database client initialized');
+      const pgInstance = getPgLite();
+      await pgInstance.waitReady;
+
+      const res = await (queryQueue = queryQueue.then(async () => {
+        return params && params.length > 0
+          ? await pgInstance.query(sql, params)
+          : await pgInstance.query(sql);
+      }, async () => {
+        return params && params.length > 0
+          ? await pgInstance.query(sql, params)
+          : await pgInstance.query(sql);
+      }));
+
+      return { rows: res.rows as T[] };
     }
   },
 };

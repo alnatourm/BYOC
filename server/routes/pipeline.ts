@@ -32,7 +32,14 @@ const gateDecisionSchema = z.object({
 });
 
 const updateTenantSettingsSchema = z.object({
-  separationOfDuties: z.boolean(),
+  requesters_can_decide: z.boolean().optional(),
+  requestersCanDecide: z.boolean().optional(),
+  separation_of_duties: z.boolean().optional(),
+  separationOfDuties: z.boolean().optional(),
+  separation_of_duties_all_gates: z.boolean().optional(),
+  separationOfDutiesAllGates: z.boolean().optional(),
+  max_revisions_per_stage: z.number().int().min(1).max(10).optional(),
+  maxRevisionsPerStage: z.number().int().min(1).max(10).optional(),
 });
 
 const uploadArtifactSchema = z.object({
@@ -407,7 +414,7 @@ pipelineRouter.post('/runs/:id/stages/:stage/start', requireAuth, requireTenantR
 pipelineRouter.get('/gates/:id', requireAuth, requireTenantRole('owner', 'admin', 'requester', 'reviewer', 'viewer'), async (req: AuthRequest, res) => {
   try {
     const { rows: gateRows } = await db.query(
-      `SELECT g.*, sr.run_id, sr.stage, sr.state as stage_state, sr.attempt, r.tenant_id, r.intent, r.title, r.project_id
+      `SELECT g.*, sr.run_id, sr.stage, sr.state as stage_state, sr.attempt, r.tenant_id, r.intent, r.title, r.project_id, r.created_by as run_creator
        FROM gates g
        JOIN stage_runs sr ON sr.id = g.stage_run_id
        JOIN runs r ON r.id = sr.run_id
@@ -465,11 +472,16 @@ pipelineRouter.get('/gates/:id', requireAuth, requireTenantRole('owner', 'admin'
     let userCanDecide = false;
     let decideDisableReason: string | null = null;
 
-    if (userRole === 'owner' || userRole === 'admin') {
+    if (gate.status !== 'pending') {
+      userCanDecide = false;
+      decideDisableReason = `Gate is not pending decision.`;
+    } else if (userRole === 'owner' || userRole === 'admin') {
       userCanDecide = true;
     } else if (userRole === 'reviewer') {
-      if (userScope === 'owner' || userScope === 'all' || userScope === gateScope) {
+      if (userScope && (userScope === 'all' || userScope === gateScope)) {
         userCanDecide = true;
+      } else if (!userScope) {
+        decideDisableReason = `Reviewer has no scope assigned (NULL) and cannot decide any gates.`;
       } else {
         decideDisableReason = `Reviewer scope '${userScope}' does not match Gate ${gate.gate_no} scope '${gateScope}'.`;
       }
@@ -656,8 +668,9 @@ pipelineRouter.post('/runs/:id/stages/:stage/refine', requireAuth, requireTenant
     const { modificationPrompt } = refineStageSchema.parse(req.body);
     const stageNo = parseInt(req.params.stage, 10);
 
-    if (isNaN(stageNo) || stageNo < 1 || stageNo > 5) {
-      return res.status(400).json({ error: 'INVALID_STAGE: Stage must be an integer between 1 and 5.' });
+    const { rows: userRows } = await db.query('SELECT email_verified_at FROM users WHERE id = $1', [req.user!.id]);
+    if (!userRows[0]?.email_verified_at) {
+      return res.status(403).json({ error: 'EMAIL_UNVERIFIED: User email address must be verified before refine.' });
     }
 
     const { rows: runRows } = await db.query(
@@ -813,8 +826,10 @@ pipelineRouter.post('/gates/:id/decision', requireAuth, requireTenantRole('owner
     if (userRole === 'owner' || userRole === 'admin') {
       permitted = true;
     } else if (userRole === 'reviewer') {
-      if (userScope === 'owner' || userScope === 'all' || userScope === gateScope) {
+      if (userScope && (userScope === 'all' || userScope === gateScope)) {
         permitted = true;
+      } else if (!userScope) {
+        forbidReason = `Reviewer has no scope assigned (NULL) and cannot decide any gates.`;
       } else {
         forbidReason = `Reviewer scope '${userScope}' does not match Gate ${gate.gate_no} scope '${gateScope}'.`;
       }
@@ -904,17 +919,17 @@ pipelineRouter.post('/gates/:id/decision', requireAuth, requireTenantRole('owner
 
 const updateMemberSchema = z.object({
   role: z.enum(['owner', 'admin', 'requester', 'reviewer', 'viewer']),
-  reviewerScope: z.enum(['owner', 'spec', 'design', 'code', 'qc', 'release', 'all']).optional(),
+  reviewerScope: z.enum(['spec', 'design', 'code', 'qc', 'release', 'all']).nullable().optional(),
 });
 
-// GET /v1/members
-pipelineRouter.get('/members', requireAuth, requireTenantRole('owner', 'admin', 'requester', 'reviewer', 'viewer'), async (req: AuthRequest, res) => {
+// GET /v1/members (owner/admin)
+pipelineRouter.get('/members', requireAuth, requireTenantRole('owner', 'admin'), async (req: AuthRequest, res) => {
   try {
     const { rows: members } = await db.query(
       `SELECT m.user_id as "userId", m.role, m.reviewer_scope as "reviewerScope", u.email, u.email_verified_at as "emailVerifiedAt"
        FROM memberships m
        JOIN users u ON u.id = m.user_id
-       WHERE m.tenant_id = $1 ORDER BY m.created_at ASC`,
+       WHERE m.tenant_id = $1 ORDER BY u.created_at ASC`,
       [req.membership!.tenantId]
     );
     res.json({ members });
@@ -923,12 +938,19 @@ pipelineRouter.get('/members', requireAuth, requireTenantRole('owner', 'admin', 
   }
 });
 
-// PATCH /v1/members/:userId
+// PATCH /v1/members/:userId (owner/admin with restrictions)
 pipelineRouter.patch('/members/:userId', requireAuth, requireTenantRole('owner', 'admin'), async (req: AuthRequest, res) => {
   try {
     const { role, reviewerScope } = updateMemberSchema.parse(req.body);
     const targetUserId = req.params.userId;
     const tenantId = req.membership!.tenantId;
+    const actorUserId = req.user!.id;
+    const actorRole = req.membership!.role;
+
+    // 2) Nobody may change their own role or scope (403)
+    if (targetUserId === actorUserId) {
+      return res.status(403).json({ error: 'FORBIDDEN: Users cannot change their own role or scope.' });
+    }
 
     const { rows: targetRows } = await db.query(
       'SELECT * FROM memberships WHERE tenant_id = $1 AND user_id = $2',
@@ -941,7 +963,17 @@ pipelineRouter.patch('/members/:userId', requireAuth, requireTenantRole('owner',
 
     const currentMember = targetRows[0];
 
-    // Cannot demote last owner
+    // 1) Only an OWNER may assign the owner role or change any owner's membership (403 for admin)
+    if (actorRole !== 'owner') {
+      if (role === 'owner') {
+        return res.status(403).json({ error: 'FORBIDDEN: Only owners can assign the owner role.' });
+      }
+      if (currentMember.role === 'owner') {
+        return res.status(403).json({ error: 'FORBIDDEN: Only owners can modify an owner member.' });
+      }
+    }
+
+    // 3) Cannot demote or remove the last owner
     if (currentMember.role === 'owner' && role !== 'owner') {
       const { rows: ownerCountRows } = await db.query(
         "SELECT COUNT(*)::int as count FROM memberships WHERE tenant_id = $1 AND role = 'owner'",
@@ -950,24 +982,36 @@ pipelineRouter.patch('/members/:userId', requireAuth, requireTenantRole('owner',
       const ownerCount = ownerCountRows[0]?.count || 0;
       if (ownerCount <= 1) {
         return res.status(400).json({
-          error: 'CANNOT_DEMOTE_LAST_OWNER: Cannot demote the last owner of a tenant.',
+          error: 'CANNOT_DEMOTE_LAST_OWNER: Cannot demote or remove the last owner of a tenant.',
         });
       }
     }
 
-    const scopeToSet = reviewerScope || (role === 'owner' ? 'owner' : 'all');
+    // 4) reviewerScope is allowed only when role === 'reviewer'; for all other roles store scope as NULL
+    let scopeToSet: string | null = null;
+    if (role === 'reviewer') {
+      scopeToSet = reviewerScope || null;
+    }
 
     await db.query(
       'UPDATE memberships SET role = $1, reviewer_scope = $2 WHERE tenant_id = $3 AND user_id = $4',
       [role, scopeToSet, tenantId, targetUserId]
     );
 
+    // 6) Audit events record old and new role and scope, the actor, and the target user
     await logAuditEvent(
       tenantId,
-      req.user!.id,
+      actorUserId,
       'member.role_updated',
       `user:${targetUserId}`,
-      { targetUserId, newRole: role, newScope: scopeToSet }
+      {
+        actorUserId,
+        targetUserId,
+        oldRole: currentMember.role,
+        oldScope: currentMember.reviewer_scope,
+        newRole: role,
+        newScope: scopeToSet,
+      }
     );
 
     res.json({
@@ -987,29 +1031,112 @@ pipelineRouter.patch('/members/:userId', requireAuth, requireTenantRole('owner',
   }
 });
 
-// PUT /v1/tenant/settings
-pipelineRouter.put('/tenant/settings', requireAuth, requireTenantRole('owner'), async (req: AuthRequest, res) => {
+// GET /v1/tenant/settings (owner/admin)
+pipelineRouter.get('/tenant/settings', requireAuth, requireTenantRole('owner', 'admin'), async (req: AuthRequest, res) => {
   try {
-    const { separationOfDuties } = updateTenantSettingsSchema.parse(req.body);
+    const { rows } = await db.query(
+      'SELECT requesters_can_decide, separation_of_duties, separation_of_duties_all_gates, max_revisions_per_stage FROM tenants WHERE id = $1',
+      [req.membership!.tenantId]
+    );
+    const settings = rows[0] || {};
+    const requestersCanDecide = settings.requesters_can_decide ?? false;
+    const separationOfDuties = settings.separation_of_duties ?? true;
+    const separationOfDutiesAllGates = settings.separation_of_duties_all_gates ?? false;
+    const maxRevisionsPerStage = settings.max_revisions_per_stage ?? 3;
 
-    await db.query('UPDATE tenants SET separation_of_duties = $1 WHERE id = $2', [
-      separationOfDuties,
-      req.membership!.tenantId,
-    ]);
+    res.json({
+      settings: {
+        requesters_can_decide: requestersCanDecide,
+        requestersCanDecide,
+        separation_of_duties: separationOfDuties,
+        separationOfDuties,
+        separation_of_duties_all_gates: separationOfDutiesAllGates,
+        separationOfDutiesAllGates,
+        max_revisions_per_stage: maxRevisionsPerStage,
+        maxRevisionsPerStage,
+      },
+    });
+  } catch {
+    res.status(500).json({ error: 'GENERIC_SERVER_ERROR' });
+  }
+});
 
-    await logAuditEvent(
-      req.membership!.tenantId,
-      req.user!.id,
-      'tenant.settings_updated',
-      `tenant:${req.membership!.tenantId}`,
-      { separationOfDuties }
+// PATCH /v1/tenant/settings (owner only)
+const handleUpdateTenantSettings = async (req: AuthRequest, res: any) => {
+  try {
+    const tenantId = req.membership!.tenantId;
+    const body = updateTenantSettingsSchema.parse(req.body);
+
+    const requestersCanDecide = body.requesters_can_decide ?? body.requestersCanDecide;
+    const separationOfDuties = body.separation_of_duties ?? body.separationOfDuties;
+    const separationOfDutiesAllGates = body.separation_of_duties_all_gates ?? body.separationOfDutiesAllGates;
+    const maxRevisionsPerStage = body.max_revisions_per_stage ?? body.maxRevisionsPerStage;
+
+    const { rows: oldRows } = await db.query(
+      'SELECT requesters_can_decide, separation_of_duties, separation_of_duties_all_gates, max_revisions_per_stage FROM tenants WHERE id = $1',
+      [tenantId]
+    );
+    const oldSettings = oldRows[0] || {};
+
+    const newRequestersCanDecide = requestersCanDecide ?? oldSettings.requesters_can_decide ?? false;
+    const newSeparationOfDuties = separationOfDuties ?? oldSettings.separation_of_duties ?? true;
+    const newSeparationOfDutiesAllGates = separationOfDutiesAllGates ?? oldSettings.separation_of_duties_all_gates ?? false;
+    const newMaxRevisionsPerStage = maxRevisionsPerStage ?? oldSettings.max_revisions_per_stage ?? 3;
+
+    await db.query(
+      `UPDATE tenants
+       SET requesters_can_decide = $1,
+           separation_of_duties = $2,
+           separation_of_duties_all_gates = $3,
+           max_revisions_per_stage = $4
+       WHERE id = $5`,
+      [newRequestersCanDecide, newSeparationOfDuties, newSeparationOfDutiesAllGates, newMaxRevisionsPerStage, tenantId]
     );
 
-    res.json({ success: true, separationOfDuties });
+    await logAuditEvent(
+      tenantId,
+      req.user!.id,
+      'tenant.settings_updated',
+      `tenant:${tenantId}`,
+      {
+        requesters_can_decide: newRequestersCanDecide,
+        separation_of_duties: newSeparationOfDuties,
+        separation_of_duties_all_gates: newSeparationOfDutiesAllGates,
+        max_revisions_per_stage: newMaxRevisionsPerStage,
+      }
+    );
+
+    if (separationOfDuties !== undefined && separationOfDuties !== oldSettings.separation_of_duties) {
+      await logAuditEvent(
+        tenantId,
+        req.user!.id,
+        'tenant.separation_of_duties_changed',
+        `tenant:${tenantId}`,
+        { oldVal: oldSettings.separation_of_duties, newVal: newSeparationOfDuties }
+      );
+    }
+
+    res.json({
+      success: true,
+      separationOfDuties: newSeparationOfDuties,
+      settings: {
+        requesters_can_decide: newRequestersCanDecide,
+        requestersCanDecide: newRequestersCanDecide,
+        separation_of_duties: newSeparationOfDuties,
+        separationOfDuties: newSeparationOfDuties,
+        separation_of_duties_all_gates: newSeparationOfDutiesAllGates,
+        separationOfDutiesAllGates: newSeparationOfDutiesAllGates,
+        max_revisions_per_stage: newMaxRevisionsPerStage,
+        maxRevisionsPerStage: newMaxRevisionsPerStage,
+      },
+    });
   } catch (err: any) {
     if (err instanceof z.ZodError) {
       return res.status(400).json({ error: 'INVALID_INPUT: ' + err.issues.map((e) => e.message).join(', ') });
     }
     res.status(500).json({ error: 'GENERIC_SERVER_ERROR' });
   }
-});
+};
+
+pipelineRouter.patch('/tenant/settings', requireAuth, requireTenantRole('owner'), handleUpdateTenantSettings);
+pipelineRouter.put('/tenant/settings', requireAuth, requireTenantRole('owner'), handleUpdateTenantSettings);

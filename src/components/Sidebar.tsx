@@ -3,13 +3,14 @@ import { useBYOK } from '../context/BYOKContext';
 
 interface SidebarProps {
   isSuperAdmin?: boolean;
+  userRole?: string;
   onLogout?: () => void;
   lang?: 'en' | 'ar';
   setLang?: (l: 'en' | 'ar') => void;
 }
 
 interface NavItem {
-  id: 'dashboard' | 'roles' | 'build' | 'agents' | 'providers' | 'models' | 'studio' | 'admin';
+  id: 'dashboard' | 'roles' | 'build' | 'agents' | 'providers' | 'models' | 'studio' | 'members' | 'admin';
   icon: string;
   titleEn: string;
   titleAr: string;
@@ -18,7 +19,7 @@ interface NavItem {
   subItems?: Array<{ id: 'agents' | 'providers' | 'studio'; label: string; dotColor: string }>;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ isSuperAdmin, onLogout, lang, setLang }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ isSuperAdmin, userRole, onLogout, lang, setLang }) => {
   const { activeTab, setActiveTab } = useBYOK();
 
   const navItems: NavItem[] = [
@@ -37,8 +38,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isSuperAdmin, onLogout, lang, 
       ],
     },
     { id: 'providers', icon: 'pie_chart', titleEn: 'Usage & Billing', titleAr: 'الفوترة' },
-    { id: 'models', icon: 'settings', titleEn: 'Settings', titleAr: 'الإعدادات' },
   ];
+
+  if (userRole === 'owner' || userRole === 'admin') {
+    navItems.push({ id: 'members', icon: 'manage_accounts', titleEn: 'Members & Rules', titleAr: 'الأعضاء والقواعد' });
+  }
+
+  navItems.push({ id: 'models', icon: 'settings', titleEn: 'Settings', titleAr: 'الإعدادات' });
 
   if (isSuperAdmin) {
     navItems.push({ id: 'admin', icon: 'admin_panel_settings', titleEn: 'Super Admin', titleAr: 'لوحة المشرف 🔑', isAdmin: true });

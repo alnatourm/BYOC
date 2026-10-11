@@ -102,8 +102,8 @@ interface BYOKContextType {
   connections: ProviderConnection[];
   hostingConnections: HostingConnection[];
   quotes: Quote[];
-  activeTab: 'dashboard' | 'roles' | 'agents' | 'models' | 'providers' | 'studio' | 'build' | 'admin';
-  setActiveTab: (tab: 'dashboard' | 'roles' | 'agents' | 'models' | 'providers' | 'studio' | 'build' | 'admin') => void;
+  activeTab: 'dashboard' | 'roles' | 'agents' | 'models' | 'providers' | 'studio' | 'build' | 'members' | 'admin';
+  setActiveTab: (tab: 'dashboard' | 'roles' | 'agents' | 'models' | 'providers' | 'studio' | 'build' | 'members' | 'admin') => void;
   
   activeRunId: string | null;
   setActiveRunId: (id: string | null) => void;
@@ -128,7 +128,8 @@ interface BYOKContextType {
   createRun: (projectId: string, title: string, intent: string) => Promise<Run>;
   addConnection: (type: string, label: string, secret: string) => Promise<void>;
   addHostingConnection: (type: string, label: string, secret: string) => Promise<void>;
-  deleteProvider: (id: string) => void;
+  deleteProvider: (id: string) => Promise<void>;
+  verifyConnection: (id: string) => Promise<any>;
   deleteModel: (id: string) => void;
   deleteAgent: (id: string) => void;
   deleteRole: (id: string) => void;
@@ -160,7 +161,7 @@ export const BYOKProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [connections, setConnections] = useState<ProviderConnection[]>([]);
   const [hostingConnections, setHostingConnections] = useState<HostingConnection[]>([]);
   const [quotes, setQuotes] = useState<Quote[]>([]);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'roles' | 'agents' | 'models' | 'providers' | 'studio' | 'build' | 'admin'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'roles' | 'agents' | 'models' | 'providers' | 'studio' | 'build' | 'members' | 'admin'>('dashboard');
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
 
   const [currentGateStep, setCurrentGateStep] = useState<'gate1' | 'gate2' | 'gate3' | 'gate4' | 'gate5' | 'completed'>('gate1');
@@ -259,8 +260,22 @@ export const BYOKProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await refreshData();
   };
 
+  const deleteProvider = async (id: string) => {
+    await api(`/v1/connections/${id}`, {
+      method: 'DELETE',
+    });
+    await refreshData();
+  };
+
+  const verifyConnection = async (id: string) => {
+    const res = await api(`/v1/connections/${id}/verify`, {
+      method: 'POST',
+    });
+    await refreshData();
+    return res;
+  };
+
   const resetToDefaults = () => {};
-  const deleteProvider = () => {};
   const deleteModel = () => {};
   const deleteAgent = () => {};
   const deleteRole = () => {};
@@ -297,6 +312,7 @@ export const BYOKProvider: React.FC<{ children: React.ReactNode }> = ({ children
         addConnection,
         addHostingConnection,
         deleteProvider,
+        verifyConnection,
         deleteModel,
         deleteAgent,
         deleteRole,

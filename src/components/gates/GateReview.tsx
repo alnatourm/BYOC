@@ -174,20 +174,22 @@ export const GateReview: React.FC<GateReviewProps> = ({
     setRefining(true);
 
     try {
+      const idempotencyKey = `idemp_refine_${Date.now()}_${crypto.randomUUID().substring(0, 8)}`;
       const res = await api(`/v1/runs/${data.run.id}/stages/${stageNo}/refine`, {
         method: 'POST',
+        idempotencyKey,
         body: JSON.stringify({ modificationPrompt: promptToSubmit }),
       });
 
-      await fetchGateData();
-      await refreshData();
-
       const aiMsg = {
         sender: 'ai' as const,
-        text: res.aiMessage || `Updated Stage 0${stageNo} document to version v${res.artifact?.version || 2}. Review the updated specification above.`,
+        text: `Refinement request submitted (Dispatch 202 Accepted). Gemini AI is updating document specifications...`,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
       setChatMessages((prev) => [...prev, aiMsg]);
+
+      await fetchGateData();
+      await refreshData();
     } catch (err: any) {
       const errorMsg = {
         sender: 'ai' as const,
@@ -404,7 +406,11 @@ export const GateReview: React.FC<GateReviewProps> = ({
           <p className="text-xs text-stone-600 mt-0.5 font-medium">{stageSubtitle}</p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="px-3 py-1 rounded-full text-xs font-bold font-mono bg-stone-100 text-stone-800 border border-stone-200">
+            Revision cycle {data?.revisionCount ?? 0} of {data?.maxRevisions ?? 3}
+          </span>
+
           {stageRun?.state && (
             <span
               className={`px-3 py-1 rounded-full text-xs font-bold uppercase font-mono ${
@@ -908,104 +914,115 @@ export const GateReview: React.FC<GateReviewProps> = ({
         </p>
       </div>
 
-      {/* HUMAN DECISION FORM */}
-      <div className="p-6 bg-white rounded-2xl border-2 border-stone-300 shadow-sm space-y-4 mt-8">
-        <h3 className="font-display font-bold text-sm text-[#1c212c]">
-          Human Approval Gate 0{stageNo} Decision
-        </h3>
+        {/* HUMAN DECISION FORM */}
+        <div className="p-6 bg-white rounded-2xl border-2 border-stone-300 shadow-sm space-y-4 mt-8">
+          <h3 className="font-display font-bold text-sm text-[#1c212c]">
+            Human Approval Gate 0{stageNo} Decision
+          </h3>
 
-        {isApproved && (
-          <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 font-bold text-xs">
-            Approved ✓ Decision recorded by tenant reviewer.
-          </div>
-        )}
+          {data?.userCanDecide === false && data?.decideDisableReason && (
+            <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold flex items-center gap-2">
+              <span className="material-symbols-outlined text-[20px] text-amber-700">block</span>
+              <span>{data.decideDisableReason}</span>
+            </div>
+          )}
 
-        {isApproved && stageNo < 5 && (
-          <div className="p-5 rounded-2xl bg-emerald-50 border-2 border-emerald-300 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-100 border border-emerald-200 flex items-center justify-center text-emerald-700">
-                <span className="material-symbols-outlined text-[24px]">verified</span>
+          {isApproved && (
+            <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 font-bold text-xs">
+              Approved ✓ Decision recorded by tenant reviewer.
+            </div>
+          )}
+
+          {isApproved && stageNo < 5 && (
+            <div className="p-5 rounded-2xl bg-emerald-50 border-2 border-emerald-300 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-100 border border-emerald-200 flex items-center justify-center text-emerald-700">
+                  <span className="material-symbols-outlined text-[24px]">verified</span>
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm text-emerald-950">Gate 0{stageNo} Approved & Verified!</h4>
+                  <p className="text-xs text-emerald-800">
+                    {stageNo === 1
+                      ? 'Specs & PRD approved. Stage 02: UI/UX Design Gate is now unlocked.'
+                      : `Stage 0${stageNo} approved. Stage 0${stageNo + 1} is now unlocked.`}
+                  </p>
+                </div>
               </div>
-              <div>
-                <h4 className="font-bold text-sm text-emerald-950">Gate 0{stageNo} Approved & Verified!</h4>
-                <p className="text-xs text-emerald-800">
-                  {stageNo === 1
-                    ? 'Specs & PRD approved. Stage 02: UI/UX Design Gate is now unlocked.'
-                    : `Stage 0${stageNo} approved. Stage 0${stageNo + 1} is now unlocked.`}
-                </p>
-              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const nextGate = `gate${stageNo + 1}` as any;
+                  setCurrentGateStep(nextGate);
+                }}
+                className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition flex items-center gap-2 cursor-pointer shrink-0"
+              >
+                <span>Proceed to Stage 0{stageNo + 1} Gate →</span>
+              </button>
+            </div>
+          )}
+
+          <form onSubmit={handleGateDecision} className="space-y-4">
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                disabled={data?.userCanDecide === false}
+                onClick={() => setDecision('approved')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold border transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+                  decision === 'approved' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-stone-100 text-stone-700 border-stone-300'
+                }`}
+              >
+                Approve Gate 0{stageNo}
+              </button>
+
+              <button
+                type="button"
+                disabled={data?.userCanDecide === false}
+                onClick={() => setDecision('changes_requested')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold border transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+                  decision === 'changes_requested' ? 'bg-amber-600 text-white border-amber-600' : 'bg-stone-100 text-stone-700 border-stone-300'
+                }`}
+              >
+                Request Changes
+              </button>
+
+              <button
+                type="button"
+                disabled={data?.userCanDecide === false}
+                onClick={() => setDecision('rejected')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold border transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+                  decision === 'rejected' ? 'bg-rose-600 text-white border-rose-600' : 'bg-stone-100 text-stone-700 border-stone-300'
+                }`}
+              >
+                Reject Gate
+              </button>
             </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                const nextGate = `gate${stageNo + 1}` as any;
-                setCurrentGateStep(nextGate);
-              }}
-              className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition flex items-center gap-2 cursor-pointer shrink-0"
-            >
-              <span>Proceed to Stage 0{stageNo + 1} Gate →</span>
-            </button>
-          </div>
-        )}
+            <div>
+              <label className="block text-xs font-bold text-stone-700 mb-1">
+                Reviewer Comment {(decision === 'changes_requested' || decision === 'rejected') && <span className="text-rose-600">*</span>}
+              </label>
+              <textarea
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                disabled={data?.userCanDecide === false}
+                placeholder="Enter review decision notes..."
+                rows={3}
+                className="w-full p-3 rounded-xl border border-stone-300 text-xs font-mono outline-none focus:border-amber-600 disabled:opacity-50"
+              />
+            </div>
 
-        <form onSubmit={handleGateDecision} className="space-y-4">
-          <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={() => setDecision('approved')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
-                decision === 'approved' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-stone-100 text-stone-700 border-stone-300'
-              }`}
-            >
-              Approve Gate 0{stageNo}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setDecision('changes_requested')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
-                decision === 'changes_requested' ? 'bg-amber-600 text-white border-amber-600' : 'bg-stone-100 text-stone-700 border-stone-300'
-              }`}
-            >
-              Request Changes
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setDecision('rejected')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
-                decision === 'rejected' ? 'bg-rose-600 text-white border-rose-600' : 'bg-stone-100 text-stone-700 border-stone-300'
-              }`}
-            >
-              Reject Gate
-            </button>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-stone-700 mb-1">
-              Reviewer Comment {(decision === 'changes_requested' || decision === 'rejected') && <span className="text-rose-600">*</span>}
-            </label>
-            <textarea
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              placeholder="Enter review decision notes..."
-              rows={3}
-              className="w-full p-3 rounded-xl border border-stone-300 text-xs font-mono outline-none focus:border-amber-600"
-            />
-          </div>
-
-          <div className="flex justify-end">
-            <button
-              type="submit"
-              disabled={submittingDecision || !isPending}
-              className="px-6 py-2.5 rounded-xl bg-stone-900 hover:bg-stone-800 text-white font-bold text-xs transition disabled:opacity-50 cursor-pointer"
-            >
-              {submittingDecision ? 'Recording Decision...' : `Submit Gate 0${stageNo} Decision`}
-            </button>
-          </div>
-        </form>
-      </div>
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                disabled={submittingDecision || !isPending || data?.userCanDecide === false}
+                className="px-6 py-2.5 rounded-xl bg-stone-900 hover:bg-stone-800 text-white font-bold text-xs transition disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+              >
+                {submittingDecision ? 'Recording Decision...' : `Submit Gate 0${stageNo} Decision`}
+              </button>
+            </div>
+          </form>
+        </div>
     </div>
   );
 };

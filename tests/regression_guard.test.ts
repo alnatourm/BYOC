@@ -76,4 +76,33 @@ describe('4. Comprehensive Codebase Regression Guard (Section 5 & Prompt 1D)', (
     expect(content).toContain('/v1/gates/');
     expect(content).toContain('/v1/runs/');
   });
+
+  it('src must not call /v1/auth/verify-current-user-email', () => {
+    const srcFiles = getAllFiles(path.resolve(process.cwd(), 'src'));
+    const violations: string[] = [];
+
+    for (const file of srcFiles) {
+      const content = fs.readFileSync(file, 'utf8');
+      if (content.includes('/v1/auth/verify-current-user-email')) {
+        violations.push(path.relative(process.cwd(), file));
+      }
+    }
+
+    expect(violations).toEqual([]);
+  });
+
+  it('Members screen is restricted to owner and admin roles', () => {
+    const membersViewPath = path.resolve(process.cwd(), 'src/components/MembersView.tsx');
+    expect(fs.existsSync(membersViewPath)).toBe(true);
+
+    const content = fs.readFileSync(membersViewPath, 'utf8');
+    expect(content).toContain('isAdminOrOwner');
+    expect(content).toContain('Access Denied');
+
+    const appPath = path.resolve(process.cwd(), 'src/App.tsx');
+    const appContent = fs.readFileSync(appPath, 'utf8');
+    expect(appContent).toContain("activeTab === 'members'");
+    expect(appContent).toContain("userRole === 'owner' || userRole === 'admin'");
+  });
 });
+
