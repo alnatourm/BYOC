@@ -56,7 +56,7 @@ export async function executeLlmRole(
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'qwen/qwen3.8-27b',
+          model: 'llama-3.3-70b-versatile',
           messages: [
             { role: 'system', content: instructionBody },
             { role: 'user', content: promptBrief }
@@ -68,6 +68,47 @@ export async function executeLlmRole(
       }
       const groqData = await groqRes.json();
       rawOutput = groqData.choices?.[0]?.message?.content || '';
+    } else if (apiKey.startsWith('sk-ant-')) {
+      const antRes = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'claude-3-5-sonnet-20241022',
+          max_tokens: 4096,
+          messages: [
+            { role: 'user', content: `${instructionBody}\n\nTask Brief:\n${promptBrief}` }
+          ]
+        })
+      });
+      if (!antRes.ok) {
+        throw new Error(`Anthropic API returned HTTP ${antRes.status}`);
+      }
+      const antData = await antRes.json();
+      rawOutput = antData.content?.[0]?.text || '';
+    } else if (apiKey.startsWith('sk-')) {
+      const oaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: instructionBody },
+            { role: 'user', content: promptBrief }
+          ]
+        })
+      });
+      if (!oaiRes.ok) {
+        throw new Error(`OpenAI API returned HTTP ${oaiRes.status}`);
+      }
+      const oaiData = await oaiRes.json();
+      rawOutput = oaiData.choices?.[0]?.message?.content || '';
     } else {
       const ai = new GoogleGenAI({
         apiKey,

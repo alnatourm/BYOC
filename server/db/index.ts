@@ -29,12 +29,8 @@ function getPgLite(): PGlite {
     if (process.env.NODE_ENV === 'test' || env.NODE_ENV === 'test') {
       pgliteInstance = new PGlite('memory://');
     } else {
-      try {
-        cleanupStalePid();
-        pgliteInstance = new PGlite('./.pglite_data');
-      } catch {
-        pgliteInstance = new PGlite('memory://');
-      }
+      cleanupStalePid();
+      pgliteInstance = new PGlite('./.pglite_data');
     }
   }
   return pgliteInstance;
@@ -43,14 +39,8 @@ function getPgLite(): PGlite {
 export function resetPgLiteInstance() {
   pgliteInstance = null;
   cleanupStalePid();
-  try {
-    const dataDir = path.resolve(process.cwd(), '.pglite_data');
-    if (fs.existsSync(dataDir)) {
-      fs.rmSync(dataDir, { recursive: true, force: true });
-    }
-  } catch {
-    // ignore deletion errors
-  }
+  // SAFE NON-DESTRUCTIVE RECOVERY:
+  // Never delete .pglite_data automatically. Persistent customer data must be preserved.
 }
 
 if (env.DATABASE_URL) {
