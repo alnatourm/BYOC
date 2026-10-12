@@ -87,23 +87,33 @@ export async function executeLlmRole(
     }
 
     // Validate Output Schema based on Role
+    const extractJson = (text: string) => {
+      const clean = text.replace(/```json|```/g, '').trim();
+      const first = clean.indexOf('{');
+      const last = clean.lastIndexOf('}');
+      if (first !== -1 && last !== -1 && last >= first) {
+        return clean.slice(first, last + 1);
+      }
+      return clean;
+    };
+
     if (role === 'spec') {
-      const cleanJson = rawOutput.replace(/```json|```/g, '').trim();
-      const parsed = JSON.parse(cleanJson);
+      const jsonStr = extractJson(rawOutput);
+      const parsed = JSON.parse(jsonStr);
       specOutputSchema.parse(parsed);
       return { rawOutput, parsedContent: parsed, valid: true };
     }
 
     if (role === 'design') {
-      const cleanJson = rawOutput.replace(/```json|```/g, '').trim();
-      const parsed = JSON.parse(cleanJson);
+      const jsonStr = extractJson(rawOutput);
+      const parsed = JSON.parse(jsonStr);
       designOutputSchema.parse(parsed);
       return { rawOutput, parsedContent: parsed, valid: true };
     }
 
     if (role === 'qc') {
-      const cleanJson = rawOutput.replace(/```json|```/g, '').trim();
-      const parsed = JSON.parse(cleanJson);
+      const jsonStr = extractJson(rawOutput);
+      const parsed = JSON.parse(jsonStr);
       qcOutputSchema.parse(parsed);
       return { rawOutput, parsedContent: parsed, valid: true };
     }

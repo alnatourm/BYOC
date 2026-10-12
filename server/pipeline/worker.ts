@@ -85,7 +85,7 @@ export async function executeStageDispatchJob(payload: DispatchJobPayload) {
         [connectionId]
       );
       const conn = connRows[0];
-      if (conn && conn.status === 'active') {
+      if (conn && conn.ciphertext && conn.status !== 'disabled') {
         apiKey = await decryptTenantSecret(conn.tenant_id, conn.id, conn.ciphertext, conn.iv, conn.tag, conn.key_version);
       }
     }
@@ -103,7 +103,7 @@ export async function executeStageDispatchJob(payload: DispatchJobPayload) {
           [factoryConnId]
         );
         const fConn = fConnRows[0];
-        if (fConn && fConn.status === 'active') {
+        if (fConn && fConn.ciphertext && fConn.status !== 'disabled') {
           apiKey = await decryptTenantSecret(fConn.tenant_id, fConn.id, fConn.ciphertext, fConn.iv, fConn.tag, fConn.key_version);
         }
       }
