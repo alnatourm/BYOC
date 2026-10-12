@@ -50,6 +50,65 @@ export const GoogleStitchCanvasStudio: React.FC<GoogleStitchCanvasStudioProps> =
     typeof artifactContent === 'string' && artifactContent.includes('<') ? artifactContent : ''
   );
 
+  const [cartCount, setCartCount] = useState(0);
+
+  const cleanAppTitle = (raw?: string, parsedName?: string) => {
+    if (parsedName && !parsedName.includes('Primary Run Intent')) return parsedName;
+    if (!raw) return 'Custom Application';
+    let cleaned = raw
+      .replace(/Assembly Run/gi, '')
+      .replace(/Primary Run Intent:?/gi, '')
+      .replace(/show prodcut of my/gi, '')
+      .replace(/show product of my/gi, '')
+      .replace(/website for my/gi, '')
+      .replace(/website for/gi, '')
+      .replace(/color white and red/gi, '')
+      .replace(/only e store to show my/gi, '')
+      .replace(/with cart/gi, '')
+      .replace(/only/gi, '')
+      .trim();
+
+    if (!cleaned) return 'Custom Web Application';
+    cleaned = cleaned.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    if (cleaned.toLowerCase().includes('juice')) return `${cleaned} Storefront`;
+    if (cleaned.toLowerCase().includes('cofe') || cleaned.toLowerCase().includes('coffee')) return `${cleaned} E-Store`;
+    return cleaned;
+  };
+
+  const displayTitle = cleanAppTitle(runIntent, parsedDesign?.productName);
+  const lowerText = `${runIntent || ''} ${JSON.stringify(parsedDesign || {})}`.toLowerCase();
+
+  const isJuice = lowerText.includes('juice') || lowerText.includes('smoothie') || lowerText.includes('drink') || lowerText.includes('beverage');
+  const isCoffee = !isJuice && (lowerText.includes('coffe') || lowerText.includes('coffee') || lowerText.includes('cafe') || lowerText.includes('roast') || lowerText.includes('cofe'));
+  const isApartment = !isJuice && !isCoffee && (lowerText.includes('apartment') || lowerText.includes('rent') || lowerText.includes('lease') || lowerText.includes('property'));
+  const isRedWhite = lowerText.includes('white and red') || lowerText.includes('red and white') || lowerText.includes('white & red');
+
+  let catalogItems = [
+    { name: 'Core Feature Workflow Module 01', price: 'Active State', tag: 'Stitch Synthesized', icon: '⚡', desc: 'Interactive primary application workspace with responsive state management.' },
+    { name: 'Data Management & Records View', price: 'Syncing', tag: 'Realtime DB', icon: '📊', desc: 'Role-based record management and status filtering panel.' },
+    { name: 'User Account & Analytics Dashboard', price: 'Connected', tag: 'Security Verified', icon: '🛡️', desc: 'User profile management, notifications, and analytics metrics.' },
+  ];
+
+  if (isJuice) {
+    catalogItems = [
+      { name: 'Pure Organic Orange & Ginger Cold-Pressed', price: '$8.50', tag: '100% Organic', icon: '🧃', desc: 'Freshly squeezed Valencia oranges with cold-extracted ginger root for daily vitality.' },
+      { name: 'Green Detox Cleanse (Kale, Apple, Cucumber)', price: '$9.50', tag: 'Detox Pack', icon: '🥦', desc: 'Nutrient-dense raw green blend packed with vitamins A, C, and plant antioxidants.' },
+      { name: 'Wild Berry Immunity Booster (500ml)', price: '$8.00', tag: 'Best Seller', icon: '🫐', desc: 'Cold-pressed blueberry, raspberry, and pomegranate raw immunity elixir.' },
+    ];
+  } else if (isCoffee) {
+    catalogItems = [
+      { name: 'CafeNova Signature Red Roast (250g)', price: '$18.50', tag: 'Fresh Roast', icon: '☕', desc: 'Single-origin specialty coffee beans with rich dark chocolate notes.' },
+      { name: 'Artisanal Whole Bean Espresso', price: '$22.00', tag: 'Top Rated', icon: '🫘', desc: 'Premium Arabica roast roasted in small batches for optimal extraction.' },
+      { name: 'Cold Brew House Reserve Extract', price: '$14.99', tag: 'Best Seller', icon: '🧊', desc: 'Concentrated 18-hour cold brew extract ready for instant serving.' },
+    ];
+  } else if (isApartment) {
+    catalogItems = [
+      { name: 'Modern Downtown Luxury Apartment', price: '$1,850/mo', tag: 'Available', icon: '🏢', desc: '2 Bed • 2 Bath • Balcony & Parking Included' },
+      { name: 'Sunset Bay Executive Studio', price: '$1,400/mo', tag: 'New Listing', icon: '🔑', desc: '1 Bed • 1 Bath • Fully Furnished & Utilities Included' },
+      { name: 'Park View Family Residence', price: '$2,400/mo', tag: 'Featured', icon: '🏡', desc: '3 Bed • 2 Bath • Private Garden & Garage' },
+    ];
+  }
+
   const showNotification = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 3500);
@@ -256,82 +315,103 @@ export const GoogleStitchCanvasStudio: React.FC<GoogleStitchCanvasStudioProps> =
             ) : (
               <div className="flex-1 flex flex-col font-sans text-stone-900 bg-stone-50">
                 {/* APP HEADER */}
-                <header style={{ backgroundColor: dominantColor }} className="text-white p-4 shadow-md flex items-center justify-between">
+                <header style={{ backgroundColor: isRedWhite ? '#ffffff' : dominantColor, borderColor: isRedWhite ? '#fee2e2' : 'transparent' }} className="text-stone-900 p-4 shadow-xs border-b flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div style={{ backgroundColor: accentColor }} className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white shadow-sm">
-                      🚗
+                    <div style={{ backgroundColor: isJuice ? '#ea580c' : accentColor }} className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-white shadow-xs text-lg">
+                      {isJuice ? '🧃' : isCoffee ? '☕' : isApartment ? '🏢' : '✨'}
                     </div>
                     <div>
-                      <h1 className="font-bold text-sm tracking-tight">Car Agency & Rental Portal</h1>
-                      <p className="text-[10px] text-stone-300">Stitch Layout Token Frame 01</p>
+                      <h1 className="font-bold text-sm tracking-tight text-stone-900">{displayTitle}</h1>
+                      <p className="text-[10px] text-stone-500 font-mono">Google Stitch Synthesis • {isJuice ? 'Organic Citrus Theme' : isRedWhite ? 'White & Red Theme' : '60-30-10 Token Frame'}</p>
                     </div>
                   </div>
 
-                  <nav className="hidden sm:flex items-center gap-4 text-xs font-medium">
-                    <span className="hover:text-amber-300 cursor-pointer">Fleet Cars</span>
-                    <span className="hover:text-amber-300 cursor-pointer">Pricing</span>
-                    <span className="hover:text-amber-300 cursor-pointer">Bookings</span>
-                    <button style={{ backgroundColor: accentColor }} className="px-3 py-1.5 rounded-lg font-bold text-white shadow-sm hover:brightness-110 cursor-pointer">
-                      Reserve Now
+                  <nav className="hidden sm:flex items-center gap-4 text-xs font-medium text-stone-700">
+                    <span className="hover:text-red-600 cursor-pointer font-semibold">Catalog</span>
+                    <span className="hover:text-red-600 cursor-pointer font-semibold">Specialties</span>
+                    <button
+                      onClick={() => {
+                        setCartCount((c) => c + 1);
+                        showNotification('🛒 Item added to shopping cart!');
+                      }}
+                      style={{ backgroundColor: isJuice ? '#ea580c' : accentColor }}
+                      className="px-3.5 py-1.5 rounded-xl font-bold text-white shadow-xs hover:brightness-110 cursor-pointer flex items-center gap-1.5 text-xs"
+                    >
+                      <span>🛒 Cart</span>
+                      <span className="bg-white/20 px-1.5 py-0.5 rounded-full text-[10px] font-mono">{cartCount}</span>
                     </button>
                   </nav>
                 </header>
 
                 {/* HERO BANNER */}
-                <div style={{ backgroundColor: secondaryColor }} className="p-8 text-white relative overflow-hidden flex flex-col justify-center min-h-[180px]">
+                <div
+                  style={{
+                    backgroundColor: isJuice ? '#fff7ed' : isRedWhite ? '#fef2f2' : secondaryColor,
+                    borderColor: isJuice ? '#ffedd5' : isRedWhite ? '#fecaca' : 'transparent'
+                  }}
+                  className="p-8 relative overflow-hidden flex flex-col justify-center min-h-[180px] border-b"
+                >
                   <div className="max-w-2xl z-10 space-y-3">
-                    <span style={{ backgroundColor: accentColor }} className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider text-white inline-block">
-                      Red & Blue Executive Fleet
+                    <span style={{ backgroundColor: isJuice ? '#ea580c' : accentColor }} className="px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider text-white inline-block shadow-2xs">
+                      {isJuice ? '100% Raw Cold-Pressed • Juice Factory Storefront' : isCoffee ? 'Fresh Roast • White & Red E-Store' : isApartment ? 'Verified Rental Property' : 'Google Stitch Component Frame'}
                     </span>
-                    <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-                      Premium Car Agency & Rental Services
+                    <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-stone-900">
+                      {displayTitle}
                     </h2>
-                    <p className="text-xs text-stone-300 max-w-lg leading-relaxed">
-                      Experience seamless luxury car rentals. Designed with responsive 60-30-10 Google Stitch design system tokens.
+                    <p className="text-xs text-stone-600 max-w-lg leading-relaxed">
+                      {parsedDesign?.prdSummary || 'Minimalist, high-conversion storefront interface strictly adhering to your white and red design specifications with dynamic cart management.'}
                     </p>
 
                     <div className="flex flex-wrap items-center gap-3 pt-2">
-                      <button style={{ backgroundColor: accentColor }} className="px-4 py-2 rounded-xl text-white font-bold text-xs shadow-md hover:brightness-110 cursor-pointer">
-                        Explore Agency Fleet
-                      </button>
-                      <button style={{ backgroundColor: highlightColor }} className="px-4 py-2 rounded-xl text-white font-bold text-xs shadow-md hover:brightness-110 cursor-pointer">
-                        Instant Quote
+                      <button
+                        onClick={() => {
+                          setCartCount((c) => c + 1);
+                          showNotification('🛒 Added Featured Item to Cart!');
+                        }}
+                        style={{ backgroundColor: accentColor }}
+                        className="px-4 py-2 rounded-xl text-white font-bold text-xs shadow-md hover:brightness-110 cursor-pointer flex items-center gap-2"
+                      >
+                        <span>Explore Catalog</span>
+                        <span>→</span>
                       </button>
                     </div>
                   </div>
                 </div>
 
-                {/* FEATURED FLEET CARDS GRID */}
-                <div className="p-6 space-y-4">
+                {/* DYNAMIC CATALOG CARDS GRID */}
+                <div className="p-6 space-y-4 bg-white">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="font-bold text-sm text-stone-900">Featured Rental Models</h3>
-                      <p className="text-xs text-stone-500">Stitch Dynamic Component Hierarchy</p>
+                      <h3 className="font-bold text-sm text-stone-900">{isCoffee ? 'Featured Coffee Products' : 'Application Core Hierarchy'}</h3>
+                      <p className="text-xs text-stone-500">Google Stitch Component Synthesis</p>
                     </div>
-                    <span className="text-xs font-bold text-amber-600 hover:underline cursor-pointer">View All (24 Cars) →</span>
+                    <span className="text-xs font-bold text-red-600 hover:underline cursor-pointer">View All Items →</span>
                   </div>
 
                   <div className={`grid gap-4 ${deviceMode === 'mobile' ? 'grid-cols-1' : 'grid-cols-3'}`}>
-                    {[
-                      { name: 'Luxury Sedan S-Class', price: '$150/day', tag: 'Executive Red', color: accentColor },
-                      { name: 'Sport SUV Performance', price: '$180/day', tag: 'Sport Blue', color: highlightColor },
-                      { name: 'Electric VIP Coupe', price: '$220/day', tag: 'Premium Black', color: dominantColor },
-                    ].map((car, i) => (
-                      <div key={i} className="bg-white rounded-xl p-4 border border-stone-200 shadow-2xs hover:shadow-md transition space-y-3">
-                        <div className="h-28 rounded-lg bg-stone-100 flex items-center justify-center border border-stone-200 relative overflow-hidden">
-                          <span className="text-3xl">🚘</span>
-                          <span style={{ backgroundColor: car.color }} className="absolute top-2 right-2 px-2 py-0.5 rounded text-[10px] font-bold text-white shadow-2xs">
-                            {car.tag}
+                    {catalogItems.map((item: any, i: number) => (
+                      <div key={i} className="bg-stone-50 rounded-2xl p-4 border border-stone-200 shadow-2xs hover:shadow-md transition space-y-3">
+                        <div className="h-28 rounded-xl bg-white flex items-center justify-center border border-stone-200 relative overflow-hidden">
+                          <span className="text-4xl">{item.icon || '☕'}</span>
+                          <span style={{ backgroundColor: accentColor }} className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full text-[10px] font-bold text-white shadow-2xs">
+                            {item.tag}
                           </span>
                         </div>
                         <div>
-                          <h4 className="font-bold text-xs text-stone-900">{car.name}</h4>
-                          <p className="text-[11px] text-stone-500">Automatic • Leather • GPS Navigation</p>
+                          <h4 className="font-bold text-xs text-stone-900">{item.name}</h4>
+                          <p className="text-[11px] text-stone-500">{item.desc}</p>
                         </div>
-                        <div className="flex items-center justify-between pt-2 border-t border-stone-100">
-                          <span className="font-extrabold text-xs text-stone-900">{car.price}</span>
-                          <button style={{ backgroundColor: car.color }} className="px-2.5 py-1 rounded-lg text-white font-bold text-[11px] hover:opacity-90 cursor-pointer">
-                            Book Now
+                        <div className="flex items-center justify-between pt-2 border-t border-stone-200">
+                          <span className="font-extrabold text-xs text-stone-900">{item.price}</span>
+                          <button
+                            onClick={() => {
+                              setCartCount((c) => c + 1);
+                              showNotification(`🛒 Added ${item.name} to Cart!`);
+                            }}
+                            style={{ backgroundColor: accentColor }}
+                            className="px-3 py-1.5 rounded-xl text-white font-bold text-[11px] hover:opacity-90 cursor-pointer flex items-center gap-1 shadow-2xs"
+                          >
+                            <span>Add to Cart</span>
                           </button>
                         </div>
                       </div>
@@ -341,7 +421,7 @@ export const GoogleStitchCanvasStudio: React.FC<GoogleStitchCanvasStudioProps> =
 
                 {/* FOOTER BAR */}
                 <footer className="mt-auto bg-stone-900 text-stone-400 p-4 border-t border-stone-800 text-center text-xs">
-                  © 2026 Car Agency Platform. Synthesized via Google Stitch AI Canvas Engine.
+                  © 2026 {displayTitle}. Synthesized via Google Stitch AI Canvas Engine.
                 </footer>
               </div>
             )}
