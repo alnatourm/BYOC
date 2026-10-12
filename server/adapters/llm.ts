@@ -46,21 +46,45 @@ export async function executeLlmRole(
       throw new Error('LLM_ADAPTER_ERROR: No API key passed to LLM role adapter.');
     }
 
-    const ai = new GoogleGenAI({
-      apiKey,
-      httpOptions: {
+    let rawOutput = '';
+
+    if (apiKey.startsWith('gsk_')) {
+      const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
         headers: {
-          'User-Agent': 'aistudio-build',
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
         },
-      },
-    });
+        body: JSON.stringify({
+          model: 'qwen/qwen3.8-27b',
+          messages: [
+            { role: 'system', content: instructionBody },
+            { role: 'user', content: promptBrief }
+          ]
+        })
+      });
+      if (!groqRes.ok) {
+        throw new Error(`Groq API returned HTTP ${groqRes.status}`);
+      }
+      const groqData = await groqRes.json();
+      rawOutput = groqData.choices?.[0]?.message?.content || '';
+    } else {
+      const ai = new GoogleGenAI({
+        apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          },
+        },
+      });
 
-    const response = await ai.models.generateContent({
-      model: effectiveModel,
-      contents: `${instructionBody}\n\nTask Prompt:\n${promptBrief}`,
-    });
+      const response = await ai.models.generateContent({
+        model: effectiveModel,
+        contents: `${instructionBody}\n\nTask Prompt:\n${promptBrief}`,
+      });
 
-    const rawOutput = response.text || '';
+      rawOutput = response.text || '';
+    }
 
     // Validate Output Schema based on Role
     if (role === 'spec') {

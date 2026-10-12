@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../../api';
 import { useBYOK } from '../../context/BYOKContext';
+import { GoogleStitchCanvasStudio } from '../GoogleStitchCanvasStudio';
 
 function FormattedSpecView({ content }: { content: string }) {
   let parsed: any = null;
@@ -372,6 +373,24 @@ export const GateReview: React.FC<GateReviewProps> = ({
     }
   };
 
+  const handleManualUploadDirect = async (content: string, mime: string) => {
+    if (!data?.run?.id || !content.trim()) return;
+
+    try {
+      setUploading(true);
+      setError(null);
+      await api(`/v1/runs/${data.run.id}/stages/2/artifacts/upload`, {
+        method: 'POST',
+        body: JSON.stringify({ content, mime }),
+      });
+      await fetchGateData();
+    } catch (err: any) {
+      setError(err.message || 'Failed to upload manual design export.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="p-12 text-center text-xs text-stone-500 font-mono animate-pulse">
@@ -610,12 +629,25 @@ export const GateReview: React.FC<GateReviewProps> = ({
           <span>Stage Output & Artifacts</span>
         </h3>
 
-        {artifacts.length === 0 ? (
+        {stageNo === 2 && artifacts.length === 0 ? (
+          <GoogleStitchCanvasStudio
+            runIntent={data?.run?.intent}
+            onUploadDesign={handleManualUploadDirect}
+          />
+        ) : artifacts.length === 0 ? (
           <div className="p-8 bg-white rounded-2xl border border-dashed border-stone-300 text-center text-xs text-stone-500 font-mono">
             No data yet. This appears after the stage runs.
           </div>
         ) : (
           <div className="space-y-4">
+            {stageNo === 2 && (
+              <GoogleStitchCanvasStudio
+                runIntent={data?.run?.intent}
+                artifactContent={artifacts[0]?.content}
+                onUploadDesign={handleManualUploadDirect}
+              />
+            )}
+
             {artifacts.map((art: any) => (
               <div key={art.id} className="p-5 bg-white rounded-2xl border border-stone-200 shadow-xs space-y-3">
                 <div className="flex flex-wrap items-center justify-between text-xs border-b border-stone-100 pb-3 gap-2">
@@ -639,7 +671,12 @@ export const GateReview: React.FC<GateReviewProps> = ({
                 </div>
 
                 {/* Render artifact based on MIME / Kind */}
-                {art.mime === 'text/html' ? (
+                {stageNo === 2 || art.kind?.includes('design') ? (
+                  <div className="text-xs text-stone-600 font-mono bg-stone-50 p-3 rounded-xl border border-stone-200">
+                    <div className="font-bold text-stone-900 mb-1">🎨 Google Stitch Design Token Payload (SHA: {art.sha256.slice(0, 12)}):</div>
+                    <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap text-[11px] font-mono text-stone-800">{art.content}</pre>
+                  </div>
+                ) : art.mime === 'text/html' ? (
                   <iframe
                     srcDoc={art.content}
                     sandbox=""

@@ -4,7 +4,7 @@ import { useBYOK } from '../context/BYOKContext';
 
 export const AdminPanelView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'factory' | 'tenants' | 'users' | 'plans' | 'quotes'>('factory');
-  const { connections } = useBYOK();
+  const { connections, setIsAddProviderOpen } = useBYOK();
   
   const [status, setStatus] = useState<{ user?: any; membership?: any; isSuperAdmin: boolean } | null>(null);
   const [factorySettings, setFactorySettings] = useState<any[]>([]);
@@ -237,16 +237,26 @@ export const AdminPanelView: React.FC = () => {
           {activeTab === 'factory' && (
             <div className="space-y-6">
               <div className="p-5 bg-white rounded-2xl border border-stone-200 space-y-3 shadow-xs">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-100 pb-3">
                   <h3 className="font-bold text-sm text-[#1f242e] flex items-center gap-2">
                     <span className="material-symbols-outlined text-amber-600 text-[20px]">factory</span>
                     <span>System Factory Default Keys & Models</span>
                   </h3>
-                  <div className="text-xs text-stone-500 font-mono">
-                    System Environment Key (`GEMINI_API_KEY`):{' '}
-                    <span className={`font-bold ${envKeyConfigured ? 'text-emerald-700' : 'text-amber-700'}`}>
-                      {envKeyConfigured ? 'Active ✓' : 'Not Configured (Optional)'}
-                    </span>
+                  
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setIsAddProviderOpen(true)}
+                      className="px-3.5 py-1.5 rounded-xl bg-[#d97706] hover:bg-amber-700 text-white font-bold text-xs shadow-2xs transition flex items-center gap-1 cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">add_moderator</span>
+                      <span>+ Add New Provider Key</span>
+                    </button>
+                    <div className="text-xs text-stone-500 font-mono">
+                      System Key (`GEMINI_API_KEY`):{' '}
+                      <span className={`font-bold ${envKeyConfigured ? 'text-emerald-700' : 'text-amber-700'}`}>
+                        {envKeyConfigured ? 'Active ✓' : 'Not Configured'}
+                      </span>
+                    </div>
                   </div>
                 </div>
                 <p className="text-xs text-stone-600">

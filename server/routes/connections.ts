@@ -11,7 +11,7 @@ import { logAuditEvent } from '../audit/chain';
 export const connectionsRouter = Router();
 
 const createConnectionSchema = z.object({
-  type: z.enum(['gemini', 'anthropic', 'openai', 'webhook']),
+  type: z.enum(['gemini', 'anthropic', 'openai', 'groq', 'webhook']),
   label: z.string().min(2),
   secret: z.string().min(1, 'Secret key or webhook URL is required'),
   spendCapUsd: z.number().optional(),

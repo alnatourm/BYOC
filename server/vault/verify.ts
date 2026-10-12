@@ -8,13 +8,27 @@ export async function validateSsrfTargetUrl(targetUrl: string): Promise<string> 
 }
 
 export async function verifyProviderApiKey(
-  type: 'gemini' | 'anthropic' | 'openai' | 'webhook',
+  type: 'gemini' | 'anthropic' | 'openai' | 'groq' | 'webhook' | string,
   secret: string
 ): Promise<{ verified: boolean; message: string }> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000);
 
   try {
+    // Auto-detect Groq keys starting with gsk_
+    if (secret.startsWith('gsk_') || type === 'groq') {
+      const res = await fetch('https://api.groq.com/openai/v1/models', {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${secret}` },
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      if (res.ok) {
+        return { verified: true, message: 'Groq API key verified successfully.' };
+      }
+      return { verified: false, message: `Groq API returned status ${res.status}` };
+    }
+
     if (type === 'gemini') {
       const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models', {
         method: 'GET',

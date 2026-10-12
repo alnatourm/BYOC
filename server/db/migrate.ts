@@ -50,4 +50,32 @@ export async function runMigrations() {
 
     await db.query('INSERT INTO schema_migrations (version) VALUES ($1) ON CONFLICT (version) DO NOTHING', [version]);
   }
+
+  // Ensure Default Super Admin Account Exists
+  try {
+    const { hashPassword } = await import('../auth/scrypt');
+    const { rows } = await db.query('SELECT id FROM users WHERE email = $1', ['admin@factory.com']);
+    if (rows.length === 0) {
+      const pass = await hashPassword('AdminPassword123!');
+      const userId = 'usr_super_admin_factory';
+      const tenantId = 'tnt_super_admin_factory';
+
+      await db.query(
+        'INSERT INTO users (id, email, password_hash, email_verified_at, platform_role) VALUES ($1, $2, $3, NOW(), $4)',
+        [userId, 'admin@factory.com', pass, 'super_admin']
+      );
+
+      await db.query(
+        'INSERT INTO tenants (id, name, plan_id, separation_of_duties) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING',
+        [tenantId, 'Factory Admin Workspace', 'enterprise', true]
+      );
+
+      await db.query(
+        'INSERT INTO memberships (tenant_id, user_id, role, reviewer_scope) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING',
+        [tenantId, userId, 'owner', 'owner']
+      );
+    }
+  } catch (e) {
+    console.warn('Super admin seeding notice:', e);
+  }
 }
