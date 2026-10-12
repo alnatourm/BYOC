@@ -100,8 +100,18 @@ async function startServer() {
     });
   }
 
-  app.listen(port, '0.0.0.0', () => {
+  const server = app.listen(port, '0.0.0.0', () => {
     console.log(`🚀 OGroup AI Factory Server listening on http://0.0.0.0:${port}`);
+  });
+
+  server.on('error', (err: any) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`⚠️ Port ${port} is already in use. Please stop any running instances on port ${port}.`);
+      process.exit(0); // Exit cleanly instead of unhandled crash
+    } else {
+      console.error('Server error:', err);
+      process.exit(1);
+    }
   });
 }
 

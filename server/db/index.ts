@@ -24,7 +24,7 @@ function cleanupStalePid() {
   }
 }
 
-function getPgLite(): PGlite {
+async function getPgLite(): Promise<PGlite> {
   if (!pgliteInstance) {
     if (process.env.NODE_ENV === 'test' || env.NODE_ENV === 'test') {
       pgliteInstance = new PGlite('memory://');
@@ -36,11 +36,14 @@ function getPgLite(): PGlite {
   return pgliteInstance;
 }
 
-export function resetPgLiteInstance() {
+export async function resetPgLiteInstance() {
+  if (pgliteInstance) {
+    try {
+      await pgliteInstance.close();
+    } catch {}
+  }
   pgliteInstance = null;
   cleanupStalePid();
-  // SAFE NON-DESTRUCTIVE RECOVERY:
-  // Never delete .pglite_data automatically. Persistent customer data must be preserved.
 }
 
 if (env.DATABASE_URL) {
@@ -101,14 +104,32 @@ export const db: DbClient = {
     }
 
     return runInQueue(async () => {
-      let pgInstance = getPgLite();
+      let pgInstance = await getPgLite();
       try {
         await pgInstance.waitReady;
       } catch (err: any) {
-        console.warn('[DB] PGlite waitReady failed. Resetting database...');
-        resetPgLiteInstance();
-        pgInstance = getPgLite();
-        await pgInstance.waitReady;
+        const errMsg = String(err?.message || err || '');
+        console.error('[DB] PGlite waitReady failed:', errMsg);
+        if (errMsg.includes('Aborted') || errMsg.includes('WASM') || errMsg.includes('abort') || errMsg.includes('failed')) {
+          console.warn('[DB] Attempting safe backup and recovery of corrupted database state without data deletion...');
+          await resetPgLiteInstance();
+          const dataDir = path.resolve(process.cwd(), '.pglite_data');
+          if (fs.existsSync(dataDir)) {
+            const backupDir = path.resolve(process.cwd(), `.pglite_data_backup_${Date.now()}`);
+            try {
+              fs.renameSync(dataDir, backupDir);
+              console.warn(`[DB] Successfully preserved existing data by moving it to ${backupDir}`);
+            } catch (backupErr) {
+              console.error('[DB] Failed to backup .pglite_data:', backupErr);
+            }
+          }
+          pgInstance = await getPgLite();
+          await pgInstance.waitReady;
+          const { runMigrations } = await import('./migrate');
+          await runMigrations();
+        } else {
+          throw err;
+        }
       }
 
       try {
@@ -119,9 +140,9 @@ export const db: DbClient = {
       } catch (err: any) {
         const errMsg = String(err?.message || err || '');
         if (errMsg.includes('Aborted') || errMsg.includes('WASM') || errMsg.includes('abort')) {
-          console.warn('[DB] PGlite WASM aborted during query. Auto-recovering database instance...');
-          resetPgLiteInstance();
-          pgInstance = getPgLite();
+          console.error('[DB] PGlite WASM aborted during query. Attempting safe recovery...', err);
+          await resetPgLiteInstance();
+          pgInstance = await getPgLite();
           await pgInstance.waitReady;
 
           const { runMigrations } = await import('./migrate');
