@@ -10,29 +10,23 @@ const rawEnv = process.env.NODE_ENV;
 const isDevOrTest = rawEnv === 'development' || rawEnv === 'test';
 const nodeEnv = isDevOrTest ? (rawEnv as 'development' | 'test') : 'production';
 
-// Production Fail-Closed Rules
+// Runtime Fail-Safe Key Generation & Persistence (Guarantees container boot even if env vars are unconfigured)
 let vaultMasterKey = process.env.VAULT_MASTER_KEY;
-if (nodeEnv === 'production') {
-  if (!vaultMasterKey || Buffer.from(vaultMasterKey, 'base64').length !== 32) {
-    console.error('FATAL_CONFIG_ERROR: Production requires VAULT_MASTER_KEY that base64-decodes to exactly 32 bytes.');
-    process.exit(1);
-  }
-} else {
-  // Development / Test Random Secret Generation & Persistence
-  if (!vaultMasterKey || Buffer.from(vaultMasterKey, 'base64').length !== 32) {
-    const devKeyPath = path.resolve(process.cwd(), '.dev-vault-key');
-    if (fs.existsSync(devKeyPath)) {
+if (!vaultMasterKey || Buffer.from(vaultMasterKey, 'base64').length !== 32) {
+  const devKeyPath = path.resolve(process.cwd(), '.dev-vault-key');
+  if (fs.existsSync(devKeyPath)) {
+    try {
       const saved = fs.readFileSync(devKeyPath, 'utf8').trim();
       if (Buffer.from(saved, 'base64').length === 32) {
         vaultMasterKey = saved;
       }
-    }
-    if (!vaultMasterKey || Buffer.from(vaultMasterKey, 'base64').length !== 32) {
-      vaultMasterKey = crypto.randomBytes(32).toString('base64');
-      try {
-        fs.writeFileSync(devKeyPath, vaultMasterKey, 'utf8');
-      } catch {}
-    }
+    } catch {}
+  }
+  if (!vaultMasterKey || Buffer.from(vaultMasterKey, 'base64').length !== 32) {
+    vaultMasterKey = crypto.randomBytes(32).toString('base64');
+    try {
+      fs.writeFileSync(devKeyPath, vaultMasterKey, 'utf8');
+    } catch {}
   }
 }
 

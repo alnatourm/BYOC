@@ -69,7 +69,11 @@ async function startServer() {
       runWatchdogTimeoutCheck(10).catch(() => {});
     }, 60000).unref();
   } catch (err: any) {
-    console.warn('⚠️ Database initialization notice during startup:', err?.message || err);
+    console.error('FATAL_STARTUP_ERROR: Database initialization or migration failed:', err?.message || err);
+    if (env.NODE_ENV === 'production') {
+      process.exit(1);
+    }
+    throw err;
   }
 
   const port = process.env.PORT === '8080' ? 3000 : (process.env.PORT ? parseInt(process.env.PORT, 10) : 3000);

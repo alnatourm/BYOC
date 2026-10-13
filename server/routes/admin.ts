@@ -44,28 +44,29 @@ adminRouter.use(requirePlatformRole('super_admin'));
 adminRouter.get('/db-diagnostics', async (req: AuthRequest, res) => {
   try {
     const isPostgres = !!process.env.DATABASE_URL;
-    let connectivity = 'disconnected';
+    let connectivityStatus = 'NOT VERIFIED';
     let latestVersion = 0;
 
     try {
       await db.query('SELECT 1');
-      connectivity = 'connected';
+      connectivityStatus = 'CONNECTED';
       const { rows } = await db.query('SELECT MAX(version) as max_version FROM schema_migrations');
       latestVersion = rows[0]?.max_version || 0;
-    } catch (e: any) {
-      connectivity = `error: ${e?.message || e}`;
+    } catch {
+      connectivityStatus = 'DISCONNECTED';
     }
 
     res.json({
-      backendType: isPostgres ? 'PostgreSQL (Cloud SQL / Pool)' : 'PGlite (Local Ephemeral Storage)',
+      backendType: isPostgres ? 'PostgreSQL' : 'PGlite',
       persistenceConfigured: isPostgres,
-      nodeEnv: process.env.NODE_ENV || 'development',
-      connectivity,
+      connectivity: connectivityStatus,
       latestMigrationVersion: latestVersion,
+      cloudSqlInstanceId: 'NOT VERIFIED',
+      cloudSqlInstanceConnectionName: 'NOT VERIFIED',
       timestamp: new Date().toISOString(),
     });
-  } catch (err: any) {
-    res.status(500).json({ error: 'DB_DIAGNOSTICS_FAILED', message: err?.message });
+  } catch {
+    res.status(500).json({ error: 'DB_DIAGNOSTICS_FAILED' });
   }
 });
 

@@ -1,82 +1,50 @@
 # NexusBYOK Production Database Migration & Rollback Guide
 
-This guide outlines the production migration procedure from ephemeral local storage (PGlite) to durable Google Cloud SQL PostgreSQL, ensuring zero data loss, tenant integrity, vault security, and hash-chain audit verification.
+This guide outlines the non-destructive production migration procedure from ephemeral local storage (PGlite) to durable Google Cloud SQL PostgreSQL.
 
 ---
 
-## 1. Cloud SQL Connection Requirements & Setup
+## 1. Pre-Migration Inventory & Record Counts
+- Execute inventory queries across all tables (`users`, `tenants`, `projects`, `runs`, `stage_runs`, `dispatches`, `artifacts`, `provider_connections`, `audit_events`, `vault_secrets`) to establish baseline record counts before migration.
 
-1. **Instance Specification**:
-   - Engine: PostgreSQL 15+
-   - Tier: `db-custom-1-3840` or higher (depending on workload)
-   - High Availability: Recommended for production (Regional)
-   - Database Name: `cloud_sql_production_database` (or equivalent)
+## 2. Source PGlite Database Identification
+- Locate the active embedded PGlite storage directory at `./.pglite_data`.
 
-2. **Network & Connectivity**:
-   - Private IP connectivity via VPC Service Controls is strongly recommended.
-   - Cloud SQL Auth Proxy or Unix Socket connection string via Cloud Run (`/cloudsql/PROJECT:REGION:INSTANCE`).
+## 3. Consistent, Non-Destructive Source Backup
+- Create a safe snapshot of the data folder without deleting or mutating source files:
+  ```bash
+  cp -r .pglite_data .pglite_data_migration_backup_$(date +%s)
+  ```
 
----
+## 4. Export Compatible with PGlite Format & Schema
+- Extract relational records and schema definitions into standard SQL INSERT statements or JSON dump format compatible with PostgreSQL 15+.
 
-## 2. Google Cloud Secret Manager Configuration
+## 5. PostgreSQL Schema Migrations
+- Apply versioned schema migrations (`server/db/migrations/*.sql`) to the target Cloud SQL database using the migration runner (`npm run migrate`).
 
-Never hardcode database credentials in environment variables or container images.
+## 6. Controlled Import into Designated Cloud SQL Database
+- Import verified data records into the destination Cloud SQL instance via secure connection strings or Cloud SQL Auth Proxy.
 
-1. Create a secret in Secret Manager:
-   ```bash
-   gcloud secrets create nexusbyok-database-url \
-     --replication-policy="automatic"
-   ```
-2. Add the connection string version:
-   ```bash
-   echo -n "postgres://nexusbyok_user:SECURE_PASSWORD@localhost:5432/cloud_sql_production_database?sslmode=disable" | \
-     gcloud secrets versions add nexusbyok-database-url --data-file=-
-   ```
-3. Grant Cloud Run service account access (`roles/secretmanager.secretAccessor`).
+## 7. Transactional Import Where Feasible
+- Execute bulk imports within explicit SQL transactions (`BEGIN; ... COMMIT;`) to guarantee atomicity.
 
----
+## 8. Idempotency & Safe Retry Behavior
+- Ensure all import scripts and migration statements use `ON CONFLICT (id) DO NOTHING` or equivalent idempotent upsert logic.
 
-## 3. Cloud Run Service Account IAM Permissions
+## 9. Tenant & Workspace Integrity Verification
+- Reconcile membership mappings, owner roles, and workspace boundaries across tenants.
 
-The Cloud Run service account requires the following minimal IAM roles:
-- `roles/cloudsql.client` (Cloud SQL Client)
-- `roles/secretmanager.secretAccessor` (Secret Accessor)
+## 10. Record Reconciliation
+- Verify parity between source and destination row counts for users, projects, runs, provider connections, audit logs, and vault secrets.
 
----
+## 11. Audit Hash-Chain Verification
+- Validate the cryptographic continuity and SHA-256 integrity of the hash-chain audit log (`server/audit/chain.ts`).
 
-## 4. Non-Destructive Migration Procedure
+## 12. Encryption-Key Compatibility Checks
+- Ensure `VAULT_MASTER_KEY` base64-decodes to exactly 32 bytes on both source and destination environments to maintain secret decryption capability.
 
-1. **Pre-Flight Inspection**:
-   - Verify existing record counts across tenants, users, projects, dispatches, and audit logs.
-   - Run the admin diagnostics endpoint: `GET /v1/admin/db-diagnostics`.
-2. **Data Export & Snapshot**:
-   - Take a pg_dump snapshot of any existing staging data:
-     ```bash
-     pg_dump $SOURCE_DATABASE_URL > migration_snapshot_$(date +%s).sql
-     ```
-3. **Schema Application**:
-   - Run automated migrations against the target Cloud SQL instance:
-     ```bash
-     NODE_ENV=production DATABASE_URL="..." npm run migrate
-     ```
-4. **Data Import & Verification**:
-   - Import the snapshot and run row-count reconciliation.
-   - Verify encrypted vault master keys (`VAULT_MASTER_KEY` must match across environment and tenant ciphertexts).
-   - Verify hash-chain audit logs integrity (`server/audit/chain.ts`).
+## 13. Rollback Preparation & Recovery Instructions
+- In case of import failure, retain the local PGlite backup and fall back to the previous Cloud Run revision while investigating error logs.
 
----
-
-## 5. Rollback Procedure
-
-If migration verification fails:
-1. Revert Cloud Run service revision to the previous stable snapshot.
-2. Ensure the rollback database URL points to the verified backup instance.
-3. Validate tenant session tokens and vault decryption.
-
----
-
-## 6. Automated Backup Requirements
-
-- Enable automated daily backups in Cloud SQL.
-- Configure point-in-time recovery (PITR) with a minimum 7-day retention window.
-- Test restoration quarterly.
+## 14. Backup & Point-In-Time Recovery (PITR) Requirements
+- Enable automated daily backups and PITR with a minimum 7-day retention window on Cloud SQL.
