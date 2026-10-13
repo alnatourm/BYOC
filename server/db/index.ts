@@ -25,6 +25,9 @@ function cleanupStalePid() {
 }
 
 async function getPgLite(): Promise<PGlite> {
+  if (process.env.NODE_ENV === 'production' && !pool) {
+    throw new Error('FATAL_DATABASE_ERROR: Production environment strictly requires DATABASE_URL pointing to durable PostgreSQL. Local PGlite ephemeral storage is prohibited in production.');
+  }
   if (!pgliteInstance) {
     if (process.env.NODE_ENV === 'test' || env.NODE_ENV === 'test') {
       pgliteInstance = new PGlite('memory://');

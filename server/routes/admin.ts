@@ -40,6 +40,35 @@ adminRouter.get('/status', async (req: AuthRequest, res) => {
 // All endpoints below require super_admin platformRole
 adminRouter.use(requirePlatformRole('super_admin'));
 
+// GET /v1/admin/db-diagnostics (Read-only database diagnostics for platform admins)
+adminRouter.get('/db-diagnostics', async (req: AuthRequest, res) => {
+  try {
+    const isPostgres = !!process.env.DATABASE_URL;
+    let connectivity = 'disconnected';
+    let latestVersion = 0;
+
+    try {
+      await db.query('SELECT 1');
+      connectivity = 'connected';
+      const { rows } = await db.query('SELECT MAX(version) as max_version FROM schema_migrations');
+      latestVersion = rows[0]?.max_version || 0;
+    } catch (e: any) {
+      connectivity = `error: ${e?.message || e}`;
+    }
+
+    res.json({
+      backendType: isPostgres ? 'PostgreSQL (Cloud SQL / Pool)' : 'PGlite (Local Ephemeral Storage)',
+      persistenceConfigured: isPostgres,
+      nodeEnv: process.env.NODE_ENV || 'development',
+      connectivity,
+      latestMigrationVersion: latestVersion,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'DB_DIAGNOSTICS_FAILED', message: err?.message });
+  }
+});
+
 const createQuoteSchema = z.object({
   provider: z.string().min(1, 'Provider is required'),
   planLabel: z.string().min(1, 'Plan label is required'),
