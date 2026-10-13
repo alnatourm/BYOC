@@ -1,8 +1,13 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { encryptTenantSecret, decryptTenantSecret } from '../server/vault/crypto';
 import { db } from '../server/db';
+import { runMigrations } from '../server/db/migrate';
 
 describe('Vault Security & Production Key Suite (Priority 0)', () => {
+  beforeAll(async () => {
+    await runMigrations();
+  });
+
   beforeEach(async () => {
     await db.query(`
       INSERT INTO tenants (id, name, plan_id, separation_of_duties)
