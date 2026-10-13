@@ -10,23 +10,43 @@ const rawEnv = process.env.NODE_ENV;
 const isDevOrTest = rawEnv === 'development' || rawEnv === 'test';
 const nodeEnv = isDevOrTest ? (rawEnv as 'development' | 'test') : 'production';
 
-// Runtime Fail-Safe Key Generation & Persistence (Guarantees container boot even if env vars are unconfigured)
+// Production vs Dev/Test Vault Master Key Rules
 let vaultMasterKey = process.env.VAULT_MASTER_KEY;
-if (!vaultMasterKey || Buffer.from(vaultMasterKey, 'base64').length !== 32) {
-  const devKeyPath = path.resolve(process.cwd(), '.dev-vault-key');
-  if (fs.existsSync(devKeyPath)) {
-    try {
-      const saved = fs.readFileSync(devKeyPath, 'utf8').trim();
-      if (Buffer.from(saved, 'base64').length === 32) {
-        vaultMasterKey = saved;
-      }
-    } catch {}
+
+if (nodeEnv === 'production') {
+  if (!vaultMasterKey) {
+    console.error('FATAL_CONFIG_ERROR: Production requires VAULT_MASTER_KEY environment variable.');
+    process.exit(1);
   }
+  let decoded: Buffer;
+  try {
+    decoded = Buffer.from(vaultMasterKey, 'base64');
+  } catch {
+    console.error('FATAL_CONFIG_ERROR: Production VAULT_MASTER_KEY is not valid base64.');
+    process.exit(1);
+  }
+  if (decoded.length !== 32) {
+    console.error('FATAL_CONFIG_ERROR: Production VAULT_MASTER_KEY must base64-decode to exactly 32 bytes.');
+    process.exit(1);
+  }
+} else {
+  // Development / Test Random Secret Generation & Persistence
   if (!vaultMasterKey || Buffer.from(vaultMasterKey, 'base64').length !== 32) {
-    vaultMasterKey = crypto.randomBytes(32).toString('base64');
-    try {
-      fs.writeFileSync(devKeyPath, vaultMasterKey, 'utf8');
-    } catch {}
+    const devKeyPath = path.resolve(process.cwd(), '.dev-vault-key');
+    if (fs.existsSync(devKeyPath)) {
+      try {
+        const saved = fs.readFileSync(devKeyPath, 'utf8').trim();
+        if (Buffer.from(saved, 'base64').length === 32) {
+          vaultMasterKey = saved;
+        }
+      } catch {}
+    }
+    if (!vaultMasterKey || Buffer.from(vaultMasterKey, 'base64').length !== 32) {
+      vaultMasterKey = crypto.randomBytes(32).toString('base64');
+      try {
+        fs.writeFileSync(devKeyPath, vaultMasterKey, 'utf8');
+      } catch {}
+    }
   }
 }
 
@@ -34,10 +54,12 @@ let sessionSecret = process.env.SESSION_SECRET;
 if (!sessionSecret || Buffer.from(sessionSecret, 'utf8').length < 32) {
   const devSecretPath = path.resolve(process.cwd(), '.dev-session-secret');
   if (fs.existsSync(devSecretPath)) {
-    const saved = fs.readFileSync(devSecretPath, 'utf8').trim();
-    if (Buffer.from(saved, 'utf8').length >= 32) {
-      sessionSecret = saved;
-    }
+    try {
+      const saved = fs.readFileSync(devSecretPath, 'utf8').trim();
+      if (Buffer.from(saved, 'utf8').length >= 32) {
+        sessionSecret = saved;
+      }
+    } catch {}
   }
   if (!sessionSecret || Buffer.from(sessionSecret, 'utf8').length < 32) {
     sessionSecret = crypto.randomBytes(32).toString('hex');
