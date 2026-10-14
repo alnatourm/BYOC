@@ -34,8 +34,11 @@ export async function executeLlmRole(
   modelName = 'gemini-3.8-flash',
   modificationPrompt?: string
 ): Promise<{ rawOutput: string; parsedContent?: any; valid: boolean; validationError?: string }> {
-  // Sanitize obsolete model names to gemini-3.8-flash
-  const effectiveModel = (!modelName || modelName.includes('2.5') || modelName.includes('1.5')) ? 'gemini-3.8-flash' : modelName;
+  // Sanitize model names to valid Gemini models
+  let effectiveModel = modelName || 'gemini-2.5-flash';
+  if (effectiveModel.includes('3.8') || (!effectiveModel.includes('2.5') && !effectiveModel.includes('1.5'))) {
+    effectiveModel = 'gemini-2.5-flash';
+  }
 
   try {
     if (!apiKey || apiKey.trim().length === 0) {

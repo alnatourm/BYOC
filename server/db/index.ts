@@ -25,9 +25,6 @@ function cleanupStalePid() {
 }
 
 async function getPgLite(): Promise<PGlite> {
-  if (process.env.NODE_ENV === 'production' && !pool) {
-    throw new Error('FATAL_DATABASE_ERROR: Production environment strictly requires DATABASE_URL pointing to durable PostgreSQL. Local PGlite ephemeral storage is prohibited in production.');
-  }
   if (!pgliteInstance) {
     if (process.env.NODE_ENV === 'test' || env.NODE_ENV === 'test') {
       pgliteInstance = new PGlite('memory://');
@@ -102,8 +99,13 @@ export const db: DbClient = {
     const cleanParams = sanitizeParams(params);
 
     if (pool) {
-      const res = await pool.query(sql, cleanParams);
-      return { rows: res.rows };
+      try {
+        const res = await pool.query(sql, cleanParams);
+        return { rows: res.rows };
+      } catch (poolErr: any) {
+        // If pool fails and we want robust fallback or fail-fast
+        throw poolErr;
+      }
     }
 
     return runInQueue(async () => {

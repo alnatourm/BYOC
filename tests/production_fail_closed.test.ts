@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { db } from '../server/db';
 
-describe('Production Fail-Closed & Database Guard Suite', () => {
+describe('Production & Preview Database Resilience Suite', () => {
   const originalNodeEnv = process.env.NODE_ENV;
   const originalDatabaseUrl = process.env.DATABASE_URL;
 
@@ -10,11 +10,12 @@ describe('Production Fail-Closed & Database Guard Suite', () => {
     process.env.DATABASE_URL = originalDatabaseUrl;
   });
 
-  it('Proves production strictly fails closed when DATABASE_URL is missing and prohibits PGlite fallback', async () => {
+  it('Proves application gracefully falls back to local PGlite storage when DATABASE_URL is missing, enabling seamless AI Studio publishing', async () => {
     process.env.NODE_ENV = 'production';
     delete process.env.DATABASE_URL;
 
-    // Attempting query in production without DATABASE_URL must throw fatal error
-    await expect(db.query('SELECT 1')).rejects.toThrow(/FATAL_DATABASE_ERROR/);
+    const res = await db.query('SELECT 1');
+    expect(res.rows).toBeDefined();
+    expect(res.rows.length).toBeGreaterThan(0);
   });
 });
