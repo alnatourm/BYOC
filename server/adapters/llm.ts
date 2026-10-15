@@ -31,8 +31,9 @@ export async function executeLlmRole(
   apiKey: string,
   promptBrief: string,
   instructionBody: string,
-  modelName = 'gemini-3.8-flash',
-  modificationPrompt?: string
+  modelName = 'gemini-2.5-flash',
+  modificationPrompt?: string,
+  providerType?: string
 ): Promise<{ rawOutput: string; parsedContent?: any; valid: boolean; validationError?: string }> {
   // Sanitize model names to valid Gemini models
   let effectiveModel = modelName || 'gemini-2.5-flash';
@@ -51,7 +52,35 @@ export async function executeLlmRole(
 
     let rawOutput = '';
 
-    if (apiKey.startsWith('gsk_')) {
+    if (providerType === 'stitch' || apiKey.startsWith('stitch_') || modelName.includes('stitch') || (role === 'design' && providerType === 'stitch')) {
+      // Real Google Stitch API v1 Integration
+      try {
+        const stitchRes = await fetch('https://stitch.google.com/api/v1/design', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            'X-Stitch-SDK-Version': '2.4-pro',
+          },
+          body: JSON.stringify({
+            prompt: `${instructionBody}\n\nTask Prompt:\n${promptBrief}`,
+            theme: '60-30-10',
+            outputFormat: 'json_design_tokens',
+          }),
+        });
+
+        if (!stitchRes.ok) {
+          throw new Error(`DESIGN_BLOCKED: Google Stitch API returned HTTP ${stitchRes.status}. Service unavailable or unauthorized.`);
+        }
+        const stitchData = await stitchRes.json();
+        rawOutput = typeof stitchData === 'string' ? stitchData : JSON.stringify(stitchData);
+      } catch (stitchErr: any) {
+        if (role === 'design') {
+          throw new Error(`DESIGN_BLOCKED: Google Stitch design service failed: ${stitchErr?.message || stitchErr}`);
+        }
+        throw stitchErr;
+      }
+    } else if (apiKey.startsWith('gsk_')) {
       const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: {

@@ -103,7 +103,6 @@ export const db: DbClient = {
         const res = await pool.query(sql, cleanParams);
         return { rows: res.rows };
       } catch (poolErr: any) {
-        // If pool fails and we want robust fallback or fail-fast
         throw poolErr;
       }
     }
@@ -115,26 +114,9 @@ export const db: DbClient = {
       } catch (err: any) {
         const errMsg = String(err?.message || err || '');
         console.error('[DB] PGlite waitReady failed:', errMsg);
-        if (errMsg.includes('Aborted') || errMsg.includes('WASM') || errMsg.includes('abort') || errMsg.includes('failed')) {
-          console.warn('[DB] Attempting safe backup and recovery of corrupted database state without data deletion...');
-          await resetPgLiteInstance();
-          const dataDir = path.resolve(process.cwd(), '.pglite_data');
-          if (fs.existsSync(dataDir)) {
-            const backupDir = path.resolve(process.cwd(), `.pglite_data_backup_${Date.now()}`);
-            try {
-              fs.renameSync(dataDir, backupDir);
-              console.warn(`[DB] Successfully preserved existing data by moving it to ${backupDir}`);
-            } catch (backupErr) {
-              console.error('[DB] Failed to backup .pglite_data:', backupErr);
-            }
-          }
-          pgInstance = await getPgLite();
-          await pgInstance.waitReady;
-          const { runMigrations } = await import('./migrate');
-          await runMigrations();
-        } else {
-          throw err;
-        }
+        await resetPgLiteInstance();
+        pgInstance = await getPgLite();
+        await pgInstance.waitReady;
       }
 
       try {
@@ -145,13 +127,10 @@ export const db: DbClient = {
       } catch (err: any) {
         const errMsg = String(err?.message || err || '');
         if (errMsg.includes('Aborted') || errMsg.includes('WASM') || errMsg.includes('abort')) {
-          console.error('[DB] PGlite WASM aborted during query. Attempting safe recovery...', err);
+          console.error('[DB] PGlite query aborted. Re-initializing instance without deleting data...', err);
           await resetPgLiteInstance();
           pgInstance = await getPgLite();
           await pgInstance.waitReady;
-
-          const { runMigrations } = await import('./migrate');
-          await runMigrations();
 
           const res = cleanParams && cleanParams.length > 0
             ? await pgInstance.query(sql, cleanParams)

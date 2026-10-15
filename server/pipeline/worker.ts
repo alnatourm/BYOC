@@ -78,7 +78,9 @@ export async function executeStageDispatchJob(payload: DispatchJobPayload) {
     }
 
     // 3. Re-load Connection & Decrypt Key IN MEMORY at execution time
+    console.log(`[VAULT TRACE] Executing dispatch ${dispatchId} for role ${roleName} with connectionId=${connectionId || 'none'}`);
     let apiKey = '';
+    let providerType = '';
     if (connectionId) {
       const { rows: connRows } = await db.query(
         'SELECT * FROM provider_connections WHERE id = $1',
@@ -86,7 +88,12 @@ export async function executeStageDispatchJob(payload: DispatchJobPayload) {
       );
       const conn = connRows[0];
       if (conn && conn.ciphertext && conn.status !== 'disabled') {
+        console.log(`[VAULT TRACE] Found connection ID ${connectionId} (type: ${conn.type}, label: ${conn.label}). Decrypting secret...`);
         apiKey = await decryptTenantSecret(conn.tenant_id, conn.id, conn.ciphertext, conn.iv, conn.tag, conn.key_version);
+        providerType = conn.type || '';
+        console.log(`[VAULT TRACE] Successfully decrypted secret for provider type: ${providerType} (Key length: ${apiKey.length}, prefix: ${apiKey.slice(0, 4)}...)`);
+      } else {
+        console.warn(`[VAULT TRACE] Connection ID ${connectionId} not found, disabled, or missing ciphertext.`);
       }
     }
 
@@ -97,6 +104,7 @@ export async function executeStageDispatchJob(payload: DispatchJobPayload) {
         [roleName]
       );
       const factoryConnId = factoryRows[0]?.connection_id;
+      console.log(`[VAULT TRACE] Checking system factory settings for role ${roleName}: factoryConnId=${factoryConnId || 'none'}`);
       if (factoryConnId) {
         const { rows: fConnRows } = await db.query(
           'SELECT * FROM provider_connections WHERE id = $1',
@@ -104,7 +112,10 @@ export async function executeStageDispatchJob(payload: DispatchJobPayload) {
         );
         const fConn = fConnRows[0];
         if (fConn && fConn.ciphertext && fConn.status !== 'disabled') {
+          console.log(`[VAULT TRACE] Found factory connection ID ${factoryConnId} (type: ${fConn.type}, label: ${fConn.label}). Decrypting...`);
           apiKey = await decryptTenantSecret(fConn.tenant_id, fConn.id, fConn.ciphertext, fConn.iv, fConn.tag, fConn.key_version);
+          providerType = fConn.type || '';
+          console.log(`[VAULT TRACE] Successfully decrypted factory secret for provider type: ${providerType} (Key length: ${apiKey.length})`);
         }
       }
     }
@@ -128,7 +139,7 @@ export async function executeStageDispatchJob(payload: DispatchJobPayload) {
     await db.query("UPDATE stage_runs SET state = 'running' WHERE id = $1", [stageRunId]);
 
     // 4. Call LLM Role Adapter
-    const res = await executeLlmRole(roleName as any, apiKey, fullPromptBrief, instructionBody, 'gemini-3.8-flash', modificationPrompt);
+    const res = await executeLlmRole(roleName as any, apiKey, fullPromptBrief, instructionBody, 'gemini-2.5-flash', modificationPrompt, providerType);
 
     // Drop decrypted apiKey reference
     apiKey = '';
